@@ -2,12 +2,28 @@
    HANDY sQUAD — app.js
    Full role-based field management system
    Supabase backend · White & Blue design
+   (Fixed: loading overlay always hides)
 ═══════════════════════════════════════════════════════════════ */
 
-// ─── SUPABASE INIT ─────────────────────────────────────────────
+// Failsafe: hide loading overlay after 5 seconds no matter what
+setTimeout(() => {
+  const overlay = document.getElementById('loading-overlay');
+  if (overlay) overlay.style.display = 'none';
+}, 5000);
+
+// ─── SUPABASE INIT (with error protection) ─────────────────────
 const SUPABASE_URL = 'https://zkzehotlgoroxdwwsjfx.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpremVob3RsZ29yb3hkd3dzamZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5MjgwNzIsImV4cCI6MjA5MTUwNDA3Mn0.JFkI_Lk5ReZDIht5yRsE57ALc-PRGobGxmJ67i48cSI';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+let sb;
+try {
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+} catch (e) {
+  console.error('Supabase init failed:', e);
+  document.getElementById('loading-overlay').style.display = 'none';
+  alert('Failed to connect to backend. Check console for details.');
+  throw e;
+}
 
 // ─── APP STATE ──────────────────────────────────────────────────
 let STATE = {
@@ -34,10 +50,11 @@ window.addEventListener('DOMContentLoaded', async () => {
       showAuth();
     }
   } catch (e) {
-    console.error(e);
-    showAuth();
+    console.error('Boot error:', e);
+    showAuth(); // fallback to login screen
+  } finally {
+    hideLoading(); // ALWAYS hide loading, even if errors occurred
   }
-  hideLoading();
 });
 
 sb.auth.onAuthStateChange(async (event, session) => {
@@ -53,15 +70,22 @@ sb.auth.onAuthStateChange(async (event, session) => {
 
 // ─── AUTH HELPERS ───────────────────────────────────────────────
 function hideLoading() {
-  document.getElementById('loading-overlay').style.display = 'none';
+  const overlay = document.getElementById('loading-overlay');
+  if (overlay) overlay.style.display = 'none';
 }
+
 function showAuth() {
-  document.getElementById('auth-screen').style.display = 'flex';
-  document.getElementById('app').classList.remove('visible');
+  const authScreen = document.getElementById('auth-screen');
+  const app = document.getElementById('app');
+  if (authScreen) authScreen.style.display = 'flex';
+  if (app) app.classList.remove('visible');
 }
+
 function showApp() {
-  document.getElementById('auth-screen').style.display = 'none';
-  document.getElementById('app').classList.add('visible');
+  const authScreen = document.getElementById('auth-screen');
+  const app = document.getElementById('app');
+  if (authScreen) authScreen.style.display = 'none';
+  if (app) app.classList.add('visible');
   buildSidebar();
   renderPage('dashboard');
   loadAllData();
@@ -69,16 +93,24 @@ function showApp() {
 
 async function loadProfile() {
   try {
-    const { data } = await sb.from('users').select('*').eq('email', STATE.user.email).single();
-    if (data) {
+    // First try to get from 'users' table
+    const { data, error } = await sb.from('users').select('*').eq('email', STATE.user.email).single();
+    if (data && !error) {
       STATE.profile = data;
       STATE.role = data.role;
     } else {
-      // Fallback: try to get role from user metadata
+      // Fallback: use metadata or default role
       STATE.role = STATE.user.user_metadata?.role || 'sales';
-      STATE.profile = { name: STATE.user.email.split('@')[0], role: STATE.role, email: STATE.user.email };
+      STATE.profile = {
+        id: STATE.user.id,
+        name: STATE.user.email.split('@')[0],
+        role: STATE.role,
+        email: STATE.user.email
+      };
+      console.warn('Users table not found – using fallback profile. Run SQL to create users table.');
     }
   } catch (e) {
+    console.error('Profile load error:', e);
     STATE.role = 'sales';
     STATE.profile = { name: STATE.user.email?.split('@')[0] || 'User', role: 'sales', email: STATE.user.email };
   }
@@ -148,7 +180,7 @@ async function loadAllData() {
     renderPage(STATE.currentPage);
   } catch (e) {
     console.error('Data load error:', e);
-    showToast('Failed to load data. Check connection.', 'error');
+    showToast('Failed to load data. Some tables may be missing.', 'error');
   }
 }
 
