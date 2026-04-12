@@ -23,7 +23,19 @@ let STATE = {
 };
 
 // ─── BOOT ───────────────────────────────────────────────────────
+let _appBooted = false;
+
 window.addEventListener('DOMContentLoaded', async () => {
+  // Safety net: always hide loading after 5 seconds no matter what
+  setTimeout(() => {
+    if (!_appBooted) {
+      console.warn('Boot timeout — forcing auth screen');
+      _appBooted = true;
+      hideLoading();
+      showAuth();
+    }
+  }, 5000);
+
   try {
     const { data: { session } } = await sb.auth.getSession();
     if (session) {
@@ -37,17 +49,21 @@ window.addEventListener('DOMContentLoaded', async () => {
     console.error(e);
     showAuth();
   }
+  _appBooted = true;
   hideLoading();
 });
 
 sb.auth.onAuthStateChange(async (event, session) => {
-  if (event === 'SIGNED_IN' && session) {
+  if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+    if (_appBooted) return; // DOMContentLoaded already handled it
     STATE.user = session.user;
     await loadProfile();
     showApp();
+    _appBooted = true;
     hideLoading();
   } else if (event === 'SIGNED_OUT') {
     STATE.user = null; STATE.profile = null; STATE.role = null;
+    _appBooted = true;
     showAuth();
     hideLoading();
   }
@@ -71,12 +87,13 @@ function showApp() {
 
 async function loadProfile() {
   try {
-    const { data } = await sb.from('users').select('*').eq('email', STATE.user.email).single();
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000));
+    const query = sb.from('users').select('*').eq('email', STATE.user.email).single();
+    const { data } = await Promise.race([query, timeout]);
     if (data) {
       STATE.profile = data;
       STATE.role = data.role;
     } else {
-      // Fallback: try to get role from user metadata
       STATE.role = STATE.user.user_metadata?.role || 'sales';
       STATE.profile = { id: STATE.user.id, name: STATE.user.email.split('@')[0], role: STATE.role, email: STATE.user.email };
     }
