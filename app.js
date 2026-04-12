@@ -1,26 +1,13 @@
 /* ═══════════════════════════════════════════════════════════════
-   HANDY sQUAD — app.js (FULL PRODUCTION VERSION)
-   SessionStorage fix · All role dashboards · All tables
+   HANDY sQUAD — app.js
+   Full role-based field management system
+   Supabase backend · White & Blue design
 ═══════════════════════════════════════════════════════════════ */
 
-// Failsafe: hide loading overlay after 5 seconds no matter what
-setTimeout(() => {
-  const overlay = document.getElementById('loading-overlay');
-  if (overlay) overlay.style.display = 'none';
-}, 5000);
-
-// ─── SUPABASE INIT (sessionStorage to avoid lock) ───────────────
+// ─── SUPABASE INIT ─────────────────────────────────────────────
 const SUPABASE_URL = 'https://zkzehotlgoroxdwwsjfx.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpremVob3RsZ29yb3hkd3dzamZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5MjgwNzIsImV4cCI6MjA5MTUwNDA3Mn0.JFkI_Lk5ReZDIht5yRsE57ALc-PRGobGxmJ67i48cSI';
-
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
-  auth: {
-    storage: window.sessionStorage,   // ← prevents localStorage lock
-    autoRefreshToken: false,
-    persistSession: true,
-    detectSessionInUrl: false
-  }
-});
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // ─── APP STATE ──────────────────────────────────────────────────
 let STATE = {
@@ -47,11 +34,10 @@ window.addEventListener('DOMContentLoaded', async () => {
       showAuth();
     }
   } catch (e) {
-    console.error('Boot error:', e);
+    console.error(e);
     showAuth();
-  } finally {
-    hideLoading();
   }
+  hideLoading();
 });
 
 sb.auth.onAuthStateChange(async (event, session) => {
@@ -59,30 +45,25 @@ sb.auth.onAuthStateChange(async (event, session) => {
     STATE.user = session.user;
     await loadProfile();
     showApp();
+    hideLoading();
   } else if (event === 'SIGNED_OUT') {
     STATE.user = null; STATE.profile = null; STATE.role = null;
     showAuth();
+    hideLoading();
   }
 });
 
 // ─── AUTH HELPERS ───────────────────────────────────────────────
 function hideLoading() {
-  const overlay = document.getElementById('loading-overlay');
-  if (overlay) overlay.style.display = 'none';
+  document.getElementById('loading-overlay').style.display = 'none';
 }
-
 function showAuth() {
-  const authScreen = document.getElementById('auth-screen');
-  const app = document.getElementById('app');
-  if (authScreen) authScreen.style.display = 'flex';
-  if (app) app.classList.remove('visible');
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('app').classList.remove('visible');
 }
-
 function showApp() {
-  const authScreen = document.getElementById('auth-screen');
-  const app = document.getElementById('app');
-  if (authScreen) authScreen.style.display = 'none';
-  if (app) app.classList.add('visible');
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app').classList.add('visible');
   buildSidebar();
   renderPage('dashboard');
   loadAllData();
@@ -90,22 +71,18 @@ function showApp() {
 
 async function loadProfile() {
   try {
-    const { data, error } = await sb.from('users').select('*').eq('email', STATE.user.email).single();
-    if (data && !error) {
+    const { data } = await sb.from('users').select('*').eq('email', STATE.user.email).single();
+    if (data) {
       STATE.profile = data;
       STATE.role = data.role;
     } else {
+      // Fallback: try to get role from user metadata
       STATE.role = STATE.user.user_metadata?.role || 'sales';
-      STATE.profile = {
-        id: STATE.user.id,
-        name: STATE.user.email.split('@')[0],
-        role: STATE.role,
-        email: STATE.user.email
-      };
+      STATE.profile = { id: STATE.user.id, name: STATE.user.email.split('@')[0], role: STATE.role, email: STATE.user.email };
     }
   } catch (e) {
     STATE.role = 'sales';
-    STATE.profile = { name: STATE.user.email?.split('@')[0] || 'User', role: 'sales', email: STATE.user.email };
+    STATE.profile = { id: STATE.user?.id, name: STATE.user.email?.split('@')[0] || 'User', role: 'sales', email: STATE.user.email };
   }
 }
 
@@ -173,7 +150,7 @@ async function loadAllData() {
     renderPage(STATE.currentPage);
   } catch (e) {
     console.error('Data load error:', e);
-    showToast('Failed to load some data. Tables may be missing.', 'error');
+    showToast('Failed to load data. Check connection.', 'error');
   }
 }
 
@@ -334,7 +311,7 @@ function renderPage(pageId) {
   el.innerHTML = (pages[pageId] || renderDashboard)();
 }
 
-// ─── DASHBOARD RENDERERS ────────────────────────────────────────
+// ─── DASHBOARD ───────────────────────────────────────────────────
 function renderDashboard() {
   const role = STATE.role;
   if (role === 'sales')       return renderSalesDashboard();
@@ -1531,32 +1508,3 @@ function showToast(msg, type = '') {
   tc.appendChild(t);
   setTimeout(() => { t.style.opacity='0'; t.style.transform='translateX(20px)'; t.style.transition='all 0.3s'; setTimeout(()=>t.remove(), 300); }, 3200);
 }
-
-// Attach functions to window for HTML onclick
-window.handleLogin = handleLogin;
-window.handleLogout = handleLogout;
-window.renderPage = renderPage;
-window.openModal = openModal;
-window.closeModal = closeModal;
-window.closeModalOnBackdrop = closeModalOnBackdrop;
-window.calcAdvTotal = calcAdvTotal;
-window.calcQuoteTotal = calcQuoteTotal;
-window.submitNewLead = submitNewLead;
-window.submitPayment = submitPayment;
-window.submitExpense = submitExpense;
-window.submitAdvance = submitAdvance;
-window.submitRework = submitRework;
-window.submitSiteVisit = submitSiteVisit;
-window.submitDailyPlan = submitDailyPlan;
-window.submitDailyReport = submitDailyReport;
-window.submitQuotation = submitQuotation;
-window.verifyPayment = verifyPayment;
-window.approveExpense = approveExpense;
-window.approveAdvance = approveAdvance;
-window.releaseAdvanceFunds = releaseAdvanceFunds;
-window.approveRework = approveRework;
-window.finalizeQuotation = finalizeQuotation;
-window.completeVisit = completeVisit;
-window.rescheduleVisit = rescheduleVisit;
-window.openJobDetail = openJobDetail;
-window.showToast = showToast;
