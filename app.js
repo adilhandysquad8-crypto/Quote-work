@@ -193,7 +193,7 @@ async function loadAllData() {
       role === 'manager' && uid
         ? sb.from('jobs').select('*, users!jobs_assigned_manager_id_fkey(name)').eq('assigned_manager_id', uid).order('created_at', { ascending: false })
         : sb.from('jobs').select('*, users!jobs_assigned_manager_id_fkey(name)').order('created_at', { ascending: false }),
-      sb.from('quotations').select('*, jobs(customer_name)').order('created_at', { ascending: false }),
+      sb.from('quotations').select('*, jobs(customer_name), quotation_items(*)').order('created_at', { ascending: false }),
       sb.from('payments').select('*, jobs(customer_name)').order('created_at', { ascending: false }),
       sb.from('expenses').select('*, expense_items(*), jobs(customer_name)').order('created_at', { ascending: false }),
       sb.from('advance_requests').select('*, jobs(customer_name)').order('created_at', { ascending: false }),
@@ -663,24 +663,208 @@ function renderQuotations() {
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Job / Customer</th><th>Version</th><th>Subtotal</th>${role!=='sales'?'<th>Profit</th><th>GST</th>':''}<th>Final Amount</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Job / Customer</th><th>Ver.</th><th>Items</th><th>Subtotal</th>${role!=='sales'?'<th>Profit</th><th>GST</th>':''}<th>Final</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody>
-        ${d.quotations.length === 0 ? `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">◎</div><div class="empty-text">No quotations yet</div></div></td></tr>` :
+        ${d.quotations.length === 0 ? `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">◎</div><div class="empty-text">No quotations yet</div></div></td></tr>` :
           d.quotations.map(q => `<tr>
             <td><strong>${q.jobs?.customer_name||'—'}</strong></td>
             <td>v${q.version||1}</td>
-            <td>${role!=='sales'?'₹'+fmt(q.subtotal||0):'—'}</td>
+            <td><span style="font-size:11px;background:var(--blue-50);color:var(--blue-700);padding:2px 7px;border-radius:20px">${(q.quotation_items||[]).length} items</span></td>
+            <td>₹${fmt(q.subtotal||0)}</td>
             ${role!=='sales'?`<td>₹${fmt(q.profit_added||0)}</td><td>${q.gst||0}%</td>`:''}
             <td><strong>₹${fmt(q.final_amount||0)}</strong></td>
             <td><span class="job-status ${quoteStatusClass(q.status)}">${q.status||'—'}</span></td>
-            <td>
-              ${role==='scheduling'&&q.status==='draft'?`<button class="btn-sm btn-approve" onclick="finalizeQuotation('${q.id}')">Finalize</button>`:''}
-              ${q.document_url&&(q.status==='approved'||q.status==='sent')?`<a href="${q.document_url}" target="_blank"><button class="btn-sm btn-verify">PDF</button></a>`:''}
+            <td style="white-space:nowrap">
+              <button class="btn-sm btn-verify" onclick="viewQuotationDetail('${q.id}')">View</button>
+              ${role==='scheduling'&&q.status==='draft'?`<button class="btn-sm btn-approve" onclick="openFinalizeModal('${q.id}')">Finalize</button>`:''}
+              ${(role==='scheduling'||role==='accounts')&&q.status!=='draft'?`<button class="btn-sm" style="background:var(--red-50);color:var(--red-700);border:1px solid var(--red-100)" onclick="downloadQuotationPDF('${q.id}')">⬇ PDF</button>`:''}
             </td>
           </tr>`).join('')}
         </tbody>
       </table>
     </div>`;
+}
+
+function viewQuotationDetail(qId) {
+  const q = STATE.data.quotations.find(x => x.id === qId);
+  if (!q) return;
+  const items = q.quotation_items || [];
+  const matItems = items.filter(i=>i.category==='material');
+  const labItems = items.filter(i=>i.category==='labour');
+  const othItems = items.filter(i=>i.category==='other');
+  const itemTable = (list, color) => list.length === 0 ? '' : list.map(i =>
+    `<tr><td style="padding:6px 8px">${i.item_name||'—'}</td><td style="padding:6px 8px;color:var(--gray-500)">${i.description||'—'}</td><td style="padding:6px 8px;text-align:right">${i.quantity}</td><td style="padding:6px 8px;text-align:right">₹${fmt(i.unit_price)}</td><td style="padding:6px 8px;text-align:right;font-weight:600;color:${color}">₹${fmt(i.total_price)}</td></tr>`
+  ).join('');
+  const section = (title, list, color, bg) => list.length === 0 ? '' : `
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;color:${color};background:${bg};padding:6px 10px;border-radius:6px;margin-bottom:4px">${title}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--gray-50)">${['Item','Description','Qty','Unit Price','Total'].map(h=>`<th style="padding:5px 8px;text-align:${h==='Item'||h==='Description'?'left':'right'};font-size:11px;color:var(--gray-500)">${h}</th>`).join('')}</tr></thead>
+        <tbody>${itemTable(list,color)}</tbody>
+      </table>
+    </div>`;
+
+  document.getElementById('modal-title').textContent = `Quotation v${q.version||1} — ${q.jobs?.customer_name||''}`;
+  document.getElementById('modal-body').innerHTML = `
+    <div style="max-height:70vh;overflow-y:auto">
+      ${q.document_url&&!q.document_url.startsWith('http')?`<div style="background:var(--blue-50);border-left:3px solid var(--blue-500);padding:10px 14px;border-radius:0 8px 8px 0;margin-bottom:14px;font-size:13px;color:var(--gray-700)">${q.document_url}</div>`:''}
+      ${section('Materials', matItems, 'var(--blue-700)', 'var(--blue-50)')}
+      ${section('Labour', labItems, 'var(--green-700)', 'var(--green-50)')}
+      ${section('Other', othItems, 'var(--purple-700)', 'var(--purple-50)')}
+      <div style="background:var(--gray-50);border-radius:8px;padding:12px;margin-top:8px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--gray-600)">Material</span><span>₹${fmt(matItems.reduce((s,i)=>s+i.total_price,0))}</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--gray-600)">Labour</span><span>₹${fmt(labItems.reduce((s,i)=>s+i.total_price,0))}</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--gray-600)">Other</span><span>₹${fmt(othItems.reduce((s,i)=>s+i.total_price,0))}</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px;padding-top:6px;border-top:1px solid var(--gray-200)"><span style="color:var(--gray-600)">Subtotal</span><span>₹${fmt(q.subtotal||0)}</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:var(--gray-600)">Profit Added</span><span>₹${fmt(q.profit_added||0)}</span></div>
+        <div style="display:flex;justify-content:space-between;margin-bottom:8px"><span style="color:var(--gray-600)">GST</span><span>${q.gst||0}%</span></div>
+        <div style="display:flex;justify-content:space-between;font-weight:700;font-size:16px;border-top:2px solid var(--gray-300);padding-top:8px"><span>Total</span><span style="color:var(--blue-700)">₹${fmt(q.final_amount||0)}</span></div>
+      </div>
+      <div class="form-actions" style="margin-top:12px">
+        <button class="btn-cancel" onclick="closeModal()">Close</button>
+        ${STATE.role==='scheduling'||STATE.role==='accounts'?`<button class="btn-submit" onclick="closeModal();downloadQuotationPDF('${q.id}')">⬇ Download PDF</button>`:''}
+      </div>
+    </div>`;
+  document.getElementById('modal-backdrop').classList.add('open');
+}
+
+function openFinalizeModal(qId) {
+  const q = STATE.data.quotations.find(x => x.id === qId);
+  if (!q) return;
+  document.getElementById('modal-title').textContent = 'Finalize Quotation';
+  document.getElementById('modal-body').innerHTML = `
+    <div style="margin-bottom:14px;background:var(--blue-50);padding:10px 14px;border-radius:8px;font-size:13px">
+      <strong>${q.jobs?.customer_name}</strong> · Subtotal: <strong>₹${fmt(q.subtotal||0)}</strong> · ${(q.quotation_items||[]).length} items
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Profit Margin (₹)</label>
+        <input class="form-input" type="number" id="f-fin-profit" value="${q.profit_added||0}" oninput="calcFinalizeTotal(${q.subtotal||0})"/></div>
+      <div class="form-group"><label class="form-label">GST (%)</label>
+        <input class="form-input" type="number" id="f-fin-gst" value="${q.gst||18}" oninput="calcFinalizeTotal(${q.subtotal||0})"/></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;background:var(--gray-50);padding:12px;border-radius:8px;margin-bottom:14px">
+      <span style="font-weight:600">Final Amount</span>
+      <span style="font-weight:700;font-size:18px;color:var(--blue-700)" id="f-fin-total">₹${fmt(q.final_amount||0)}</span>
+    </div>
+    <div class="form-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-submit" onclick="submitFinalizeQuotation('${qId}')">Finalize & Mark Reviewed</button>
+    </div>`;
+  document.getElementById('modal-backdrop').classList.add('open');
+  calcFinalizeTotal(q.subtotal||0);
+}
+
+function calcFinalizeTotal(subtotal) {
+  const profit = parseFloat(document.getElementById('f-fin-profit')?.value)||0;
+  const gst    = parseFloat(document.getElementById('f-fin-gst')?.value)||0;
+  const final  = (subtotal + profit) * (1 + gst/100);
+  const el = document.getElementById('f-fin-total');
+  if (el) el.textContent = '₹' + fmt(Math.round(final));
+}
+
+async function submitFinalizeQuotation(qId) {
+  const q = STATE.data.quotations.find(x => x.id === qId);
+  const profit = parseFloat(document.getElementById('f-fin-profit').value)||0;
+  const gst    = parseFloat(document.getElementById('f-fin-gst').value)||0;
+  const final  = Math.round((( q?.subtotal||0) + profit) * (1 + gst/100));
+  const { error } = await sb.from('quotations').update({
+    profit_added: profit, gst, final_amount: final,
+    status: 'reviewed', reviewed_by: STATE.profile?.id
+  }).eq('id', qId);
+  if (error) { showToast('Error: ' + error.message, 'error'); return; }
+  showToast('Quotation finalized! Final: ₹' + fmt(final), 'success');
+  closeModal(); loadAllData();
+}
+
+function downloadQuotationPDF(qId) {
+  const q = STATE.data.quotations.find(x => x.id === qId);
+  if (!q) return;
+  const items = q.quotation_items || [];
+  const job = STATE.data.jobs.find(j => j.id === q.job_id);
+  const matItems = items.filter(i=>i.category==='material');
+  const labItems = items.filter(i=>i.category==='labour');
+  const othItems = items.filter(i=>i.category==='other');
+  const matTotal = matItems.reduce((s,i)=>s+i.total_price,0);
+  const labTotal = labItems.reduce((s,i)=>s+i.total_price,0);
+  const othTotal = othItems.reduce((s,i)=>s+i.total_price,0);
+
+  const itemRows = (list) => list.map(i => `
+    <tr>
+      <td style="padding:7px 10px;border-bottom:1px solid #eee">${i.item_name||'—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #eee;color:#666">${i.description||'—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right">${i.quantity}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right">₹${(i.unit_price||0).toLocaleString('en-IN')}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600">₹${(i.total_price||0).toLocaleString('en-IN')}</td>
+    </tr>`).join('');
+
+  const sectionBlock = (title, list, total, color) => list.length === 0 ? '' : `
+    <tr><td colspan="5" style="background:${color}15;padding:6px 10px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:${color}">${title}</td></tr>
+    ${itemRows(list)}
+    <tr style="background:#f9f9f9"><td colspan="4" style="padding:6px 10px;text-align:right;font-weight:600">${title} Total</td><td style="padding:6px 10px;text-align:right;font-weight:700;color:${color}">₹${total.toLocaleString('en-IN')}</td></tr>`;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Quotation - ${q.jobs?.customer_name||''}</title>
+  <style>
+    body{font-family:'Segoe UI',Arial,sans-serif;margin:0;padding:32px;color:#1e293b;font-size:14px}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #1976D2}
+    .brand{font-size:22px;font-weight:700;color:#1976D2}.brand span{font-size:13px;color:#64748b;font-weight:400;display:block}
+    .meta{text-align:right;font-size:12px;color:#64748b}
+    .meta strong{font-size:16px;color:#1e293b;display:block;margin-bottom:4px}
+    .customer-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin-bottom:24px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .lbl{font-size:11px;text-transform:uppercase;letter-spacing:0.4px;color:#94a3b8;margin-bottom:2px}
+    .val{font-weight:600;font-size:14px}
+    table{width:100%;border-collapse:collapse;margin-bottom:24px}
+    th{background:#f1f5f9;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;color:#64748b}
+    th:last-child,th:nth-child(3),th:nth-child(4){text-align:right}
+    .totals{margin-left:auto;width:300px}
+    .totals table{margin:0}
+    .totals td{padding:6px 10px;border-bottom:1px solid #eee}
+    .totals .grand{font-weight:700;font-size:16px;color:#1976D2;border-top:2px solid #1976D2}
+    .desc{background:#fffbeb;border-left:3px solid #f59e0b;padding:10px 14px;border-radius:0 6px 6px 0;margin-bottom:20px;font-size:13px;color:#78350f}
+    .footer{margin-top:40px;padding-top:16px;border-top:1px solid #e2e8f0;font-size:11px;color:#94a3b8;text-align:center}
+    @media print{body{padding:16px}}
+  </style></head><body>
+  <div class="header">
+    <div><div class="brand">Handy sQuad <span>Field Management System</span></div></div>
+    <div class="meta"><strong>QUOTATION</strong>Version ${q.version||1} · ${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}<br>Status: ${(q.status||'').toUpperCase()}</div>
+  </div>
+  <div class="customer-box">
+    <div><div class="lbl">Customer</div><div class="val">${q.jobs?.customer_name||'—'}</div></div>
+    <div><div class="lbl">Phone</div><div class="val">${job?.customer_phone||'—'}</div></div>
+    <div><div class="lbl">Location</div><div class="val">${job?.location_text||'—'}</div></div>
+    <div><div class="lbl">Quotation Date</div><div class="val">${new Date(q.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div></div>
+  </div>
+  ${q.document_url&&!q.document_url.startsWith('http')?`<div class="desc"><strong>Scope of Work:</strong> ${q.document_url}</div>`:''}
+  <table>
+    <thead><tr><th>Item</th><th>Description</th><th>Qty</th><th>Unit Price</th><th>Total</th></tr></thead>
+    <tbody>
+      ${sectionBlock('Materials', matItems, matTotal, '#1976D2')}
+      ${sectionBlock('Labour', labItems, labTotal, '#15803d')}
+      ${sectionBlock('Other', othItems, othTotal, '#7e22ce')}
+    </tbody>
+  </table>
+  <div class="totals">
+    <table>
+      <tr><td>Material</td><td style="text-align:right">₹${matTotal.toLocaleString('en-IN')}</td></tr>
+      <tr><td>Labour</td><td style="text-align:right">₹${labTotal.toLocaleString('en-IN')}</td></tr>
+      <tr><td>Other</td><td style="text-align:right">₹${othTotal.toLocaleString('en-IN')}</td></tr>
+      <tr><td>Subtotal</td><td style="text-align:right">₹${(q.subtotal||0).toLocaleString('en-IN')}</td></tr>
+      <tr><td>Profit Added</td><td style="text-align:right">₹${(q.profit_added||0).toLocaleString('en-IN')}</td></tr>
+      <tr><td>GST (${q.gst||0}%)</td><td style="text-align:right">₹${Math.round(((q.subtotal||0)+(q.profit_added||0))*(q.gst||0)/100).toLocaleString('en-IN')}</td></tr>
+      <tr class="grand"><td><strong>TOTAL</strong></td><td style="text-align:right"><strong>₹${(q.final_amount||0).toLocaleString('en-IN')}</strong></td></tr>
+    </table>
+  </div>
+  <div class="footer">This is a computer-generated quotation. Handy sQuad Field Management System · Generated ${new Date().toLocaleString('en-IN')}</div>
+  </body></html>`;
+
+  const blob = new Blob([html], { type: 'text/html' });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, '_blank');
+  if (win) {
+    win.addEventListener('load', () => { win.print(); });
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  showToast('PDF opened — use browser Print to save as PDF', 'success');
 }
 
 function renderPayments() {
@@ -1489,42 +1673,219 @@ async function submitDailyReport() {
   closeModal(); loadAllData();
 }
 
+// ─── QUOTATION SYSTEM ────────────────────────────────────────────
+// Holds line items while building a quotation
+let QUOTE_ITEMS = [];
+
 function newQuotationForm() {
   const role = STATE.role;
-  return `<div class="form-row-single form-group"><label class="form-label">Job</label><select class="form-select" id="f-qjob">${jobOptions()}</select></div>
-    <div class="form-row"><div class="form-group"><label class="form-label">Subtotal (₹)</label><input class="form-input" id="f-qsub" type="number" placeholder="0" oninput="calcQuoteTotal()"/></div>
-    ${role==='scheduling'?`<div class="form-group"><label class="form-label">Profit Added (₹)</label><input class="form-input" id="f-qprofit" type="number" placeholder="0" oninput="calcQuoteTotal()"/></div></div>
-    <div class="form-row"><div class="form-group"><label class="form-label">GST (%)</label><input class="form-input" id="f-qgst" type="number" placeholder="18" oninput="calcQuoteTotal()"/></div>
-    <div class="form-group"><label class="form-label">Final Amount (₹)</label><input class="form-input" id="f-qfinal" type="number" readonly style="background:var(--gray-50)"/></div></div>`
-    :`<div class="form-group"><label class="form-label">Final Amount (₹)</label><input class="form-input" id="f-qfinal" type="number" placeholder="0"/></div></div>
-    <div style="background:var(--amber-50);border:1px solid var(--amber-100);padding:10px 14px;border-radius:var(--radius-md);font-size:12px;color:var(--amber-700);margin-bottom:14px">Note: Profit and GST will be added by Scheduling when reviewing this quotation.</div>`}
-    <div class="form-actions"><button class="btn-cancel" onclick="closeModal()">Cancel</button><button class="btn-submit" onclick="submitQuotation()">Save Draft</button></div>`;
+  QUOTE_ITEMS = [];
+  return `
+  <div style="max-height:75vh;overflow-y:auto;padding-right:4px">
+    <div class="form-row-single form-group">
+      <label class="form-label">Job / Customer</label>
+      <select class="form-select" id="f-qjob" onchange="updateQuoteJobInfo()">${jobOptions()}</select>
+    </div>
+    <div class="form-row-single form-group">
+      <label class="form-label">Scope of Work / Description</label>
+      <textarea class="form-textarea" id="f-qdesc" placeholder="Describe the overall work scope, site conditions, special requirements..."></textarea>
+    </div>
+
+    <!-- LINE ITEMS -->
+    <div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <label class="form-label" style="margin:0">Line Items</label>
+        <div style="display:flex;gap:6px">
+          <button type="button" class="btn-sm btn-approve" onclick="addQuoteItem('material')">+ Material</button>
+          <button type="button" class="btn-sm btn-verify" onclick="addQuoteItem('labour')">+ Labour</button>
+          <button type="button" class="btn-sm" style="background:var(--purple-50);color:var(--purple-700);border:1px solid var(--purple-100)" onclick="addQuoteItem('other')">+ Other</button>
+        </div>
+      </div>
+      <div id="quote-items-container">
+        <div style="text-align:center;padding:16px;color:var(--gray-400);font-size:13px;border:1px dashed var(--gray-200);border-radius:8px">
+          Add items using the buttons above
+        </div>
+      </div>
+    </div>
+
+    <!-- SUMMARY BOX -->
+    <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:10px;padding:14px;margin-bottom:14px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px">
+        <div style="text-align:center">
+          <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.4px">Material</div>
+          <div style="font-weight:600;font-size:15px;color:var(--blue-700)" id="q-sum-material">₹0</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.4px">Labour</div>
+          <div style="font-weight:600;font-size:15px;color:var(--green-700)" id="q-sum-labour">₹0</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.4px">Other</div>
+          <div style="font-weight:600;font-size:15px;color:var(--purple-700)" id="q-sum-other">₹0</div>
+        </div>
+      </div>
+      <div style="border-top:1px solid var(--gray-200);padding-top:10px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="font-size:13px;color:var(--gray-600)">Subtotal</span>
+          <span style="font-weight:600" id="q-subtotal">₹0</span>
+        </div>
+        ${role==='scheduling'?`
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:13px;color:var(--gray-600)">Profit Margin (₹)</span>
+          <input type="number" id="f-qprofit" style="width:100px;padding:4px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;text-align:right" placeholder="0" oninput="recalcQuoteTotals()"/>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <span style="font-size:13px;color:var(--gray-600)">GST (%)</span>
+          <input type="number" id="f-qgst" style="width:100px;padding:4px 8px;border:1px solid var(--gray-200);border-radius:6px;font-size:13px;text-align:right" placeholder="18" oninput="recalcQuoteTotals()"/>
+        </div>`:`
+        <div style="background:var(--amber-50);border:1px solid var(--amber-100);padding:8px 10px;border-radius:6px;font-size:12px;color:var(--amber-700);margin-bottom:6px">
+          Profit &amp; GST will be added by Scheduling after review.
+        </div>`}
+        <div style="display:flex;justify-content:space-between;border-top:1px solid var(--gray-300);padding-top:8px;margin-top:6px">
+          <span style="font-weight:600;font-size:14px">Final Amount</span>
+          <span style="font-weight:700;font-size:16px;color:var(--blue-700)" id="q-final">₹0</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="form-actions">
+    <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+    <button class="btn-submit" onclick="submitQuotation()">Save Draft</button>
+  </div>`;
 }
 
-function calcQuoteTotal() {
-  const sub = parseFloat(document.getElementById('f-qsub')?.value)||0;
-  const profit = parseFloat(document.getElementById('f-qprofit')?.value)||0;
-  const gst = parseFloat(document.getElementById('f-qgst')?.value)||0;
-  const total = (sub + profit) * (1 + gst/100);
-  const el = document.getElementById('f-qfinal');
-  if (el) el.value = total.toFixed(0);
+function addQuoteItem(category) {
+  const id = 'qi_' + Date.now();
+  QUOTE_ITEMS.push({ id, category, item_name:'', description:'', quantity:1, unit_price:0, total_price:0 });
+  renderQuoteItems();
 }
+
+function removeQuoteItem(id) {
+  QUOTE_ITEMS = QUOTE_ITEMS.filter(i => i.id !== id);
+  renderQuoteItems();
+}
+
+function updateQuoteItem(id, field, value) {
+  const item = QUOTE_ITEMS.find(i => i.id === id);
+  if (!item) return;
+  item[field] = field === 'quantity' || field === 'unit_price' ? parseFloat(value)||0 : value;
+  item.total_price = item.quantity * item.unit_price;
+  recalcQuoteTotals();
+  // Update the total display for this row only
+  const totalEl = document.getElementById('qi-total-' + id);
+  if (totalEl) totalEl.textContent = '₹' + fmt(item.total_price);
+}
+
+const CAT_COLOR = { material: 'var(--blue-700)', labour: 'var(--green-700)', other: 'var(--purple-700)' };
+const CAT_BG    = { material: 'var(--blue-50)',  labour: 'var(--green-50)',   other: 'var(--purple-50)'  };
+
+function renderQuoteItems() {
+  const container = document.getElementById('quote-items-container');
+  if (!container) return;
+  if (QUOTE_ITEMS.length === 0) {
+    container.innerHTML = `<div style="text-align:center;padding:16px;color:var(--gray-400);font-size:13px;border:1px dashed var(--gray-200);border-radius:8px">Add items using the buttons above</div>`;
+    recalcQuoteTotals();
+    return;
+  }
+  container.innerHTML = QUOTE_ITEMS.map(item => `
+    <div style="border:1px solid var(--gray-200);border-radius:8px;padding:10px;margin-bottom:8px;background:white">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:${CAT_BG[item.category]};color:${CAT_COLOR[item.category]}">${item.category.toUpperCase()}</span>
+        <button type="button" onclick="removeQuoteItem('${item.id}')" style="background:none;border:none;color:var(--gray-400);cursor:pointer;font-size:16px;line-height:1">×</button>
+      </div>
+      <div class="form-row" style="margin-bottom:6px">
+        <div class="form-group">
+          <input class="form-input" style="font-size:13px;padding:6px 10px" placeholder="Item name" value="${item.item_name}"
+            oninput="updateQuoteItem('${item.id}','item_name',this.value)"/>
+        </div>
+        <div class="form-group">
+          <input class="form-input" style="font-size:13px;padding:6px 10px" placeholder="Description (optional)" value="${item.description}"
+            oninput="updateQuoteItem('${item.id}','description',this.value)"/>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:center">
+        <div>
+          <div style="font-size:11px;color:var(--gray-500);margin-bottom:3px">Qty</div>
+          <input class="form-input" type="number" style="font-size:13px;padding:6px 10px" value="${item.quantity}" min="0"
+            oninput="updateQuoteItem('${item.id}','quantity',this.value)"/>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--gray-500);margin-bottom:3px">Unit Price (₹)</div>
+          <input class="form-input" type="number" style="font-size:13px;padding:6px 10px" value="${item.unit_price}" min="0"
+            oninput="updateQuoteItem('${item.id}','unit_price',this.value)"/>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--gray-500);margin-bottom:3px">Total</div>
+          <div id="qi-total-${item.id}" style="font-weight:600;font-size:14px;color:${CAT_COLOR[item.category]};padding:6px 0">₹${fmt(item.total_price)}</div>
+        </div>
+      </div>
+    </div>`).join('');
+  recalcQuoteTotals();
+}
+
+function recalcQuoteTotals() {
+  const matTotal  = QUOTE_ITEMS.filter(i=>i.category==='material').reduce((s,i)=>s+i.total_price,0);
+  const labTotal  = QUOTE_ITEMS.filter(i=>i.category==='labour').reduce((s,i)=>s+i.total_price,0);
+  const othTotal  = QUOTE_ITEMS.filter(i=>i.category==='other').reduce((s,i)=>s+i.total_price,0);
+  const subtotal  = matTotal + labTotal + othTotal;
+  const profit    = parseFloat(document.getElementById('f-qprofit')?.value)||0;
+  const gst       = parseFloat(document.getElementById('f-qgst')?.value)||0;
+  const finalAmt  = (subtotal + profit) * (1 + gst/100);
+
+  const set = (id,val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
+  set('q-sum-material', '₹'+fmt(matTotal));
+  set('q-sum-labour',   '₹'+fmt(labTotal));
+  set('q-sum-other',    '₹'+fmt(othTotal));
+  set('q-subtotal',     '₹'+fmt(subtotal));
+  set('q-final',        '₹'+fmt(finalAmt));
+}
+
+// Keep old function name as alias
+function calcQuoteTotal() { recalcQuoteTotals(); }
 
 async function submitQuotation() {
   const jobId = document.getElementById('f-qjob').value;
-  const sub = parseFloat(document.getElementById('f-qsub')?.value)||0;
-  const profit = parseFloat(document.getElementById('f-qprofit')?.value)||0;
-  const gst = parseFloat(document.getElementById('f-qgst')?.value)||0;
-  const final = parseFloat(document.getElementById('f-qfinal')?.value)||0;
+  const desc  = document.getElementById('f-qdesc')?.value.trim() || '';
+  if (!jobId) { showToast('Please select a job', 'error'); return; }
+  if (QUOTE_ITEMS.length === 0) { showToast('Add at least one line item', 'error'); return; }
+
+  const matTotal = QUOTE_ITEMS.filter(i=>i.category==='material').reduce((s,i)=>s+i.total_price,0);
+  const labTotal = QUOTE_ITEMS.filter(i=>i.category==='labour').reduce((s,i)=>s+i.total_price,0);
+  const othTotal = QUOTE_ITEMS.filter(i=>i.category==='other').reduce((s,i)=>s+i.total_price,0);
+  const subtotal = matTotal + labTotal + othTotal;
+  const profit   = parseFloat(document.getElementById('f-qprofit')?.value)||0;
+  const gst      = parseFloat(document.getElementById('f-qgst')?.value)||0;
+  const final    = (subtotal + profit) * (1 + gst/100);
   const existing = STATE.data.quotations.filter(q=>q.job_id===jobId);
-  const { error } = await sb.from('quotations').insert({
-    job_id: jobId, version: (existing.length||0)+1,
-    subtotal: sub, profit_added: profit, gst,
-    final_amount: final, status: 'draft',
-    created_by: STATE.profile?.id
-  });
+
+  const { data: qData, error } = await sb.from('quotations').insert({
+    job_id: jobId,
+    version: (existing.length||0)+1,
+    subtotal, profit_added: profit, gst,
+    final_amount: Math.round(final),
+    status: 'draft',
+    created_by: STATE.profile?.id,
+    document_url: desc  // reuse document_url to store description until schema has a field
+  }).select().single();
+
   if (error) { showToast('Error: ' + error.message, 'error'); return; }
-  showToast('Quotation draft created!', 'success');
+
+  // Save all line items
+  if (qData && QUOTE_ITEMS.length > 0) {
+    const itemRows = QUOTE_ITEMS.map(i => ({
+      quotation_id: qData.id,
+      item_name:    i.item_name || '(unnamed)',
+      description:  i.description,
+      category:     i.category,
+      quantity:     i.quantity,
+      unit_price:   i.unit_price,
+      total_price:  i.total_price
+    }));
+    await sb.from('quotation_items').insert(itemRows);
+  }
+
+  QUOTE_ITEMS = [];
+  showToast('Quotation draft saved with ' + itemRows?.length + ' items!', 'success');
   closeModal(); loadAllData();
 }
 
@@ -1598,10 +1959,8 @@ async function approveRework(id, status) {
 }
 
 async function finalizeQuotation(id) {
-  const { error } = await sb.from('quotations').update({ status: 'reviewed', reviewed_by: STATE.profile?.id }).eq('id', id);
-  if (error) { showToast('Error: ' + error.message, 'error'); return; }
-  showToast('Quotation finalized!', 'success');
-  loadAllData();
+  // Legacy shim — redirects to new modal
+  openFinalizeModal(id);
 }
 
 async function completeVisit(id) {
