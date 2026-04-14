@@ -56,48 +56,51 @@ function renderSalesDashboard() {
 
 function renderSchedulingDashboard() {
   const d = STATE.data;
-  const activeJobs = d.jobs.filter(j => j.status !== 'completed').length;
-  const delayed = d.jobs.filter(j => j.status === 'delayed').length;
-  const pendingVisits = d.siteVisits.filter(v => v.status === 'scheduled').length;
+  const needsAction = d.jobs.filter(j => j.status !== 'completed' && j.status !== 'delayed').length;
+  const delayed     = d.jobs.filter(j => j.status === 'delayed').length;
+  const inVisit     = d.jobs.filter(j => j.status === 'site_visit').length;
+  const inQuote     = d.jobs.filter(j => j.status === 'quotation' || j.status === 'pending_approval').length;
+  const inWork      = d.jobs.filter(j => j.status === 'active').length;
   const pendingRework = d.reworkRequests.filter(r => r.status === 'pending').length;
-  const newLeads = d.leads.filter(l => l.status === 'site_visit_requested' || l.status === 'new').length;
 
   return `
     <div class="stats-grid">
-      ${statCard('Active Jobs', activeJobs, '#1976D2', 'badge-info', 'Ongoing')}
-      ${statCard('Delayed Jobs', delayed, '#EF5350', delayed>0?'badge-danger':'badge-up', delayed>0?'Urgent':'All on track')}
-      ${statCard('Site Visits', pendingVisits, '#0D47A1', pendingVisits>0?'badge-warn':'badge-up', pendingVisits>0?'Needs scheduling':'Clear')}
-      ${statCard('New Leads', newLeads, '#F59E0B', newLeads>0?'badge-warn':'badge-up', newLeads>0?'Awaiting visit':'All handled')}
+      ${statCard('Needs Action', needsAction, '#1976D2', needsAction>0?'badge-warn':'badge-up', 'Jobs in pipeline')}
+      ${statCard('Site Visit Stage', inVisit, '#2196F3', inVisit>0?'badge-info':'badge-up', inVisit>0?'Visit pending':'Clear')}
+      ${statCard('Quote Stage', inQuote, '#FF9800', inQuote>0?'badge-warn':'badge-up', inQuote>0?'Awaiting approval':'Clear')}
+      ${statCard('Work In Progress', inWork, '#4CAF50', inWork>0?'badge-info':'badge-up', inWork>0?'Active':'None')}
     </div>
-    <div class="two-col">
-      <div class="card">
-        <div class="card-header"><span class="card-title">Incoming Site Visits</span><span class="card-link" onclick="renderPage('site-visits')">View all</span></div>
-        ${siteVisitMiniScheduling(d.siteVisits.filter(v => v.status === 'scheduled').slice(0, 5))}
+
+    <!-- PIPELINE BOARD -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">
+        <span class="card-title">Job Pipeline</span>
+        <span class="card-link" onclick="renderPage('jobs')">All Jobs</span>
       </div>
-      <div class="card">
-        <div class="card-header"><span class="card-title">Quick Actions</span></div>
-        <div class="card-body">
-          <div class="quick-actions">
-            <button class="qa-btn" onclick="openModal('assign-manager')"><span class="qa-icon">◈</span>Assign Manager</button>
-            <button class="qa-btn" onclick="openModal('schedule-visit')"><span class="qa-icon">◷</span>Schedule Visit</button>
-            <button class="qa-btn" onclick="renderPage('rework')"><span class="qa-icon">↩</span>Review Rework</button>
-            <button class="qa-btn" onclick="openModal('new-advance')"><span class="qa-icon">◑</span>Create Advance</button>
-          </div>
-          <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--gray-100)">
-            <div class="card-title" style="margin-bottom:10px">New Leads Needing Visit</div>
-            ${newLeadsNeedingVisit(d.leads.filter(l=>l.status==='site_visit_requested'||l.status==='new').slice(0,3))}
-          </div>
-        </div>
+      <div class="card-body" style="padding:8px">
+        ${renderJobPipeline()}
       </div>
     </div>
+
     <div class="two-col">
       <div class="card">
         <div class="card-header"><span class="card-title">Rework Queue</span><span class="card-link" onclick="renderPage('rework')">View all</span></div>
         ${reworkList(d.reworkRequests.filter(r=>r.status==='pending').slice(0,3), 'scheduling')}
       </div>
       <div class="card">
-        <div class="card-header"><span class="card-title">Pending Advance Requests</span></div>
-        ${advanceMini(d.advances.filter(a=>a.status==='pending').slice(0,3))}
+        <div class="card-header"><span class="card-title">Quick Actions</span></div>
+        <div class="card-body">
+          <div class="quick-actions">
+            <button class="qa-btn" onclick="openModal('assign-manager')"><span class="qa-icon">◈</span>Assign Manager</button>
+            <button class="qa-btn" onclick="renderPage('advances')"><span class="qa-icon">◑</span>Advances</button>
+            <button class="qa-btn" onclick="renderPage('quotations')"><span class="qa-icon">◎</span>Quotations</button>
+            <button class="qa-btn" onclick="renderPage('rework')"><span class="qa-icon">↩</span>Rework</button>
+          </div>
+          <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--gray-100)">
+            <div class="card-title" style="margin-bottom:8px">Pending Advances</div>
+            ${advanceMini(d.advances.filter(a=>a.status==='pending').slice(0,3))}
+          </div>
+        </div>
       </div>
     </div>`;
 }
@@ -213,4 +216,3 @@ function renderAccountsDashboard() {
       </div>
     </div>`;
 }
-
