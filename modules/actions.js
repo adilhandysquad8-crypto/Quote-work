@@ -26,7 +26,9 @@ async function approveAdvance(id, status) {
 }
 
 async function releaseAdvanceFunds(advId) {
-  openModal('release-funds');
+  document.getElementById('modal-title').textContent = 'Release Funds';
+  document.getElementById('modal-body').innerHTML = releaseFundsForm(advId);
+  document.getElementById('modal-backdrop').classList.add('open');
 }
 
 async function approveRework(id, status) {
