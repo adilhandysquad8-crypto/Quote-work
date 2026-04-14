@@ -1,24 +1,31 @@
 // ─── PAGE RENDERERS ──────────────────────────────────────────────
 function renderLeads() {
   const d = STATE.data;
+  const role = STATE.role;
+  const filtered = applyFilters(d.leads, 'leads', { searchFields: ['customer_name','location_text','requirement_summary','customer_phone'] });
   return `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div></div>
-      <button class="btn-submit" onclick="openModal('new-lead')">+ New Lead</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="text-muted text-sm">${filtered.length} of ${d.leads.length} leads</div>
+      ${role==='sales'?`<button class="btn-submit" onclick="openModal('new-lead')">+ New Lead</button>`:''}
     </div>
+    ${filterBar('leads', {
+      searchPlaceholder: 'Search customer, location...',
+      statuses: ['new','contacted','site_visit_requested','converted','lost'],
+      dateFilter: true
+    })}
     <div class="table-wrap">
       <table>
         <thead><tr><th>Customer</th><th>Phone</th><th>Location</th><th>Requirement</th><th>Status</th><th>Created</th><th>Actions</th></tr></thead>
         <tbody>
-        ${d.leads.length === 0 ? `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">◎</div><div class="empty-text">No leads yet</div></div></td></tr>` :
-          d.leads.map(l => `<tr>
-            <td><strong>${l.customer_name||'—'}</strong></td>
-            <td>${l.customer_phone||'—'}</td>
-            <td>${l.location_link ? `<span class="loc-badge">📍 <a href="${l.location_link}" target="_blank" style="color:inherit">Map</a></span>` : l.location_text||'—'}</td>
-            <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.requirement_summary||'—'}</td>
-            <td><span class="job-status ${leadStatusClass(l.status)}">${l.status||'—'}</span></td>
-            <td>${fmtDate(l.created_at)}</td>
-            <td>${STATE.role==='scheduling'&&(l.status==='new'||l.status==='site_visit_requested')?
+        ${filtered.length === 0 ? `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">◎</div><div class="empty-text">No leads match filters</div></div></td></tr>` :
+          filtered.map(l => `<tr>
+            <td data-label="Customer"><strong>${l.customer_name||'—'}</strong></td>
+            <td data-label="Phone">${l.customer_phone||'—'}</td>
+            <td data-label="Location">${l.location_link ? `<a href="${l.location_link}" target="_blank" class="loc-badge">📍 Map</a>` : l.location_text||'—'}</td>
+            <td data-label="Requirement" style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.requirement_summary||'—'}</td>
+            <td data-label="Status"><span class="job-status ${leadStatusClass(l.status)}">${(l.status||'—').replace(/_/g,' ')}</span></td>
+            <td data-label="Created">${fmtDate(l.created_at)}</td>
+            <td data-label="Actions">${role==='scheduling'&&(l.status==='new'||l.status==='site_visit_requested')?
               `<button class="btn-sm btn-approve" onclick="convertLeadToVisit('${l.id}')">Schedule Visit</button>`:'—'}
             </td>
           </tr>`).join('')}
@@ -30,24 +37,34 @@ function renderLeads() {
 function renderJobs() {
   const d = STATE.data;
   const role = STATE.role;
+  const filtered = applyFilters(d.jobs, 'jobs', { searchFields: ['customer_name','location_text','customer_phone'] });
   return `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div class="text-muted text-sm">${d.jobs.length} jobs total</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="text-muted text-sm">${filtered.length} of ${d.jobs.length} jobs</div>
     </div>
+    ${filterBar('jobs', {
+      searchPlaceholder: 'Search customer, location...',
+      statuses: ['site_visit','quotation','pending_approval','active','completed','delayed','rework'],
+      dateFilter: true
+    })}
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Customer</th><th>Location</th>${role==='scheduling'?'<th>Manager</th>':''}<th>Status</th>${role!=='sales'?'<th>Progress</th>':''}${role==='accounts'?'<th>Quoted</th>':''}<th>Created</th></tr></thead>
+        <thead><tr><th>#</th><th>Customer</th><th>Location</th>${role==='scheduling'?'<th>Manager</th>':''}<th>Status</th>${role!=='sales'?'<th>Progress</th>':''}${role!=='sales'?'<th>Quoted</th>':''}<th>Created</th></tr></thead>
         <tbody>
-        ${d.jobs.length === 0 ? `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">▣</div><div class="empty-text">No jobs found</div></div></td></tr>` :
-          d.jobs.map(j => `<tr onclick="openJobDetail('${j.id}')" style="cursor:pointer">
-            <td><strong>${j.customer_name||'—'}</strong><div class="text-sm text-muted">#${j.id?.substring(0,8)}</div></td>
-            <td>${j.location_link ? `<span class="loc-badge">📍 <a href="${j.location_link}" target="_blank" style="color:inherit" onclick="event.stopPropagation()">Map</a></span>` : j.location_text||'—'}</td>
-            ${role==='scheduling'?`<td>${j.users?.name||'Unassigned'}</td>`:''}
-            <td><span class="job-status ${jobStatusClass(j.status)}">${j.status||'—'}</span></td>
-            ${role!=='sales'?`<td><div class="progress-bar"><div class="progress-fill" style="width:${jobProgress(j)}%"></div></div><div class="text-sm text-muted">${jobProgress(j)}%</div></td>`:''}
-            ${role==='accounts'?`<td class="font-mono">₹${fmt(d.quotations.find(q=>q.job_id===j.id&&q.status==='approved')?.final_amount||0)}</td>`:''}
-            <td>${fmtDate(j.created_at)}</td>
-          </tr>`).join('')}
+        ${filtered.length === 0 ? `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">▣</div><div class="empty-text">No jobs match filters</div></div></td></tr>` :
+          filtered.map((j,i) => {
+            const bestQuote = d.quotations.filter(q=>q.job_id===j.id&&q.status!=='rejected').sort((a,b)=>b.version-a.version)[0];
+            return `<tr onclick="openJobDetail('${j.id}')" style="cursor:pointer">
+              <td data-label="#"><span style="font-size:11px;color:var(--gray-400);font-family:monospace">${j.id?.substring(0,6).toUpperCase()}</span></td>
+              <td data-label="Customer"><strong>${j.customer_name||'—'}</strong></td>
+              <td data-label="Location">${j.location_link ? `<a href="${j.location_link}" target="_blank" class="loc-badge" onclick="event.stopPropagation()">📍 Map</a>` : j.location_text||'—'}</td>
+              ${role==='scheduling'?`<td data-label="Manager">${j.users?.name||'Unassigned'}</td>`:''}
+              <td data-label="Status"><span class="job-status ${jobStatusClass(j.status)}">${(j.status||'—').replace(/_/g,' ')}</span></td>
+              ${role!=='sales'?`<td data-label="Progress"><div class="progress-bar"><div class="progress-fill" style="width:${jobProgress(j)}%"></div></div><div class="text-sm text-muted">${jobProgress(j)}%</div></td>`:''}
+              ${role!=='sales'?`<td data-label="Quoted"><strong style="color:var(--blue-700)">₹${fmt(bestQuote?.final_amount||0)}</strong></td>`:''}
+              <td data-label="Created">${fmtDate(j.created_at)}</td>
+            </tr>`;
+          }).join('')}
         </tbody>
       </table>
     </div>`;
@@ -56,28 +73,49 @@ function renderJobs() {
 function renderQuotations() {
   const d = STATE.data;
   const role = STATE.role;
+  // Custom filter: search by customer name via joined jobs
+  const f = FILTERS['quotations'] || {};
+  let filtered = d.quotations;
+  if (f.search) {
+    const q = f.search.toLowerCase();
+    filtered = filtered.filter(qt => (qt.jobs?.customer_name||'').toLowerCase().includes(q));
+  }
+  if (f.status) filtered = filtered.filter(qt => qt.status === f.status);
+  if (f.dateFrom) filtered = filtered.filter(qt => new Date(qt.created_at) >= new Date(f.dateFrom));
+  if (f.dateTo)   filtered = filtered.filter(qt => new Date(qt.created_at) <= new Date(f.dateTo + 'T23:59:59'));
+
   return `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div class="text-muted text-sm">${d.quotations.length} quotations</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="text-muted text-sm">${filtered.length} of ${d.quotations.length} quotations</div>
       ${role==='manager'?`<button class="btn-submit" onclick="openModal('new-quotation')">+ Draft Quotation</button>`:''}
     </div>
+    ${filterBar('quotations', {
+      searchPlaceholder: 'Search customer...',
+      statuses: ['draft','reviewed','sent','approved','rejected'],
+      dateFilter: true
+    })}
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Job / Customer</th><th>Ver.</th><th>Items</th><th>Subtotal</th>${role!=='sales'?'<th>Profit</th><th>GST</th>':''}<th>Final</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Quote #</th><th>Customer</th><th>Ver.</th><th>Items</th><th>Subtotal</th>${role!=='sales'?'<th>Profit</th><th>GST</th>':''}<th>Final</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
         <tbody>
-        ${d.quotations.length === 0 ? `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">◎</div><div class="empty-text">No quotations yet</div></div></td></tr>` :
-          d.quotations.map(q => `<tr>
-            <td><strong>${q.jobs?.customer_name||'—'}</strong></td>
-            <td>v${q.version||1}</td>
-            <td><span style="font-size:11px;background:var(--blue-50);color:var(--blue-700);padding:2px 7px;border-radius:20px">${(q.quotation_items||[]).length} items</span></td>
-            <td>₹${fmt(q.subtotal||0)}</td>
-            ${role!=='sales'?`<td>₹${fmt(q.profit_added||0)}</td><td>${q.gst||0}%</td>`:''}
-            <td><strong>₹${fmt(q.final_amount||0)}</strong></td>
-            <td><span class="job-status ${quoteStatusClass(q.status)}">${q.status||'—'}</span></td>
-            <td style="white-space:nowrap">
-              <button class="btn-sm btn-verify" onclick="viewQuotationDetail('${q.id}')">View</button>
-              ${role==='scheduling'&&q.status==='draft'?`<button class="btn-sm btn-approve" onclick="openFinalizeModal('${q.id}')">Finalize</button>`:''}
-              ${(role==='scheduling'||role==='accounts')&&q.status!=='draft'?`<button class="btn-sm" style="background:var(--red-50);color:var(--red-700);border:1px solid var(--red-100)" onclick="downloadQuotationPDF('${q.id}')">⬇ PDF</button>`:''}
+        ${filtered.length === 0 ? `<tr><td colspan="11"><div class="empty-state"><div class="empty-icon">◎</div><div class="empty-text">No quotations match filters</div></div></td></tr>` :
+          filtered.map(q => `<tr>
+            <td data-label="Quote#"><span style="font-family:monospace;font-size:11px;background:var(--gray-100);padding:2px 6px;border-radius:4px">Q-${q.id?.substring(0,6).toUpperCase()}</span></td>
+            <td data-label="Customer"><strong>${q.jobs?.customer_name||'—'}</strong></td>
+            <td data-label="Ver">v${q.version||1}</td>
+            <td data-label="Items"><span style="font-size:11px;background:var(--blue-50);color:var(--blue-700);padding:2px 7px;border-radius:20px">${(q.quotation_items||[]).length} items</span></td>
+            <td data-label="Subtotal">₹${fmt(q.subtotal||0)}</td>
+            ${role!=='sales'?`<td data-label="Profit">₹${fmt(q.profit_added||0)}</td><td data-label="GST">${q.gst||0}%</td>`:''}
+            <td data-label="Final"><strong>₹${fmt(q.final_amount||0)}</strong></td>
+            <td data-label="Status"><span class="job-status ${quoteStatusClass(q.status)}">${q.status||'—'}</span></td>
+            <td data-label="Date">${fmtDate(q.created_at)}</td>
+            <td data-label="Actions" style="white-space:nowrap">
+              <div style="display:flex;gap:4px;flex-wrap:wrap">
+                <button class="btn-sm btn-verify" onclick="viewQuotationDetail('${q.id}')">View</button>
+                ${role==='scheduling'&&q.status==='draft'?`<button class="btn-sm btn-approve" onclick="openFinalizeModal('${q.id}')">Finalize</button>`:''}
+                ${role==='scheduling'&&q.status==='draft'?`<button class="btn-sm" style="background:var(--red-50);color:var(--red-700);border:1px solid var(--red-100);padding:4px 8px" onclick="deleteQuotation('${q.id}')">🗑</button>`:''}
+                ${(role==='scheduling'||role==='accounts')&&q.status!=='draft'?`<button class="btn-sm" style="background:var(--blue-50);color:var(--blue-700);border:1px solid var(--blue-100)" onclick="downloadQuotationPDF('${q.id}')">⬇ PDF</button>`:''}
+              </div>
             </td>
           </tr>`).join('')}
         </tbody>
@@ -270,22 +308,31 @@ function downloadQuotationPDF(qId) {
 function renderPayments() {
   const d = STATE.data;
   const role = STATE.role;
+  const f = FILTERS['payments'] || {};
+  let filtered = d.payments;
+  if (f.search) { const q=f.search.toLowerCase(); filtered=filtered.filter(p=>(p.jobs?.customer_name||'').toLowerCase().includes(q)); }
+  if (f.status) filtered=filtered.filter(p=>p.status===f.status);
+  if (f.dateFrom) filtered=filtered.filter(p=>new Date(p.created_at)>=new Date(f.dateFrom));
+  if (f.dateTo)   filtered=filtered.filter(p=>new Date(p.created_at)<=new Date(f.dateTo+'T23:59:59'));
+
+  const total = filtered.reduce((s,p)=>s+(p.amount||0),0);
   return `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div class="text-muted text-sm">${d.payments.length} payments</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="text-muted text-sm">${filtered.length} payments · Total: <strong>₹${fmt(total)}</strong></div>
       ${role==='sales'?`<button class="btn-submit" onclick="openModal('upload-payment')">↑ Upload Proof</button>`:''}
     </div>
+    ${filterBar('payments',{searchPlaceholder:'Search customer...',statuses:['pending','verified','rejected'],dateFilter:true})}
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Job</th><th>Type</th><th>Amount</th><th>Status</th><th>Uploaded</th>${role==='accounts'?'<th>Actions</th>':''}</tr></thead>
+        <thead><tr><th>Customer</th><th>Type</th><th>Amount</th><th>Status</th><th>Date</th>${role==='accounts'?'<th>Actions</th>':''}</tr></thead>
         <tbody>
-        ${d.payments.length === 0 ? `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">↑</div><div class="empty-text">No payments yet</div></div></td></tr>` :
-          d.payments.map(p => `<tr>
-            <td>${p.jobs?.customer_name||p.job_id?.substring(0,8)||'—'}</td>
-            <td><span class="pay-type ${p.type==='advance'?'pay-adv':'pay-fin'}">${p.type||'—'}</span></td>
-            <td><strong style="font-family:'DM Mono',monospace">₹${fmt(p.amount||0)}</strong></td>
-            <td><span class="job-status ${payStatusClass(p.status)}">${p.status||'—'}</span></td>
-            <td>${fmtDate(p.created_at)}</td>
+        ${filtered.length===0?`<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">↑</div><div class="empty-text">No payments match filters</div></div></td></tr>`:
+          filtered.map(p=>`<tr>
+            <td data-label="Customer"><strong>${p.jobs?.customer_name||'—'}</strong></td>
+            <td data-label="Type"><span class="pay-type ${p.type==='advance'?'pay-adv':'pay-fin'}">${p.type||'—'}</span></td>
+            <td data-label="Amount"><strong style="font-family:'DM Mono',monospace">₹${fmt(p.amount||0)}</strong></td>
+            <td data-label="Status"><span class="job-status ${payStatusClass(p.status)}">${p.status||'—'}</span></td>
+            <td data-label="Date">${fmtDate(p.created_at)}</td>
             ${role==='accounts'&&p.status==='pending'?`<td><button class="btn-sm btn-verify" onclick="verifyPayment('${p.id}','verified')">Verify</button> <button class="btn-sm btn-reject" onclick="verifyPayment('${p.id}','rejected')">Reject</button></td>`:role==='accounts'?`<td>—</td>`:''}
           </tr>`).join('')}
         </tbody>
@@ -298,22 +345,31 @@ function renderPaymentHistory() { return renderPayments(); }
 function renderExpenses() {
   const d = STATE.data;
   const role = STATE.role;
+  const f = FILTERS['expenses'] || {};
+  let filtered = d.expenses;
+  if (f.search) { const q=f.search.toLowerCase(); filtered=filtered.filter(e=>(e.jobs?.customer_name||e.description||'').toLowerCase().includes(q)); }
+  if (f.status) filtered=filtered.filter(e=>e.status===f.status);
+  if (f.dateFrom) filtered=filtered.filter(e=>new Date(e.created_at)>=new Date(f.dateFrom));
+  if (f.dateTo)   filtered=filtered.filter(e=>new Date(e.created_at)<=new Date(f.dateTo+'T23:59:59'));
+
+  const total = filtered.reduce((s,e)=>s+(e.total_amount||0),0);
   return `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <div class="text-muted text-sm">${d.expenses.length} expenses</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div class="text-muted text-sm">${filtered.length} expenses · Total: <strong>₹${fmt(total)}</strong></div>
       ${role==='manager'?`<button class="btn-submit" onclick="openModal('new-expense')">+ Add Expense</button>`:''}
     </div>
+    ${filterBar('expenses',{searchPlaceholder:'Search customer, description...',statuses:['pending','approved','rejected'],dateFilter:true})}
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Job</th><th>Description</th><th>Amount</th><th>Status</th><th>Date</th>${role==='accounts'?'<th>Actions</th>':''}</tr></thead>
+        <thead><tr><th>Customer</th><th>Description</th><th>Amount</th><th>Status</th><th>Date</th>${role==='accounts'?'<th>Actions</th>':''}</tr></thead>
         <tbody>
-        ${d.expenses.length === 0 ? `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">◈</div><div class="empty-text">No expenses yet</div></div></td></tr>` :
-          d.expenses.map(e => `<tr>
-            <td>${e.jobs?.customer_name||'—'}</td>
-            <td>${e.description||'—'}</td>
-            <td><strong style="font-family:'DM Mono',monospace">₹${fmt(e.total_amount||0)}</strong></td>
-            <td><span class="exp-status ${e.status==='approved'?'exp-appr':e.status==='rejected'?'exp-rej':'exp-pend'}">${e.status||'pending'}</span></td>
-            <td>${fmtDate(e.created_at)}</td>
+        ${filtered.length===0?`<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">◈</div><div class="empty-text">No expenses match filters</div></div></td></tr>`:
+          filtered.map(e=>`<tr>
+            <td data-label="Customer"><strong>${e.jobs?.customer_name||'—'}</strong></td>
+            <td data-label="Description">${e.description||'—'}</td>
+            <td data-label="Amount"><strong style="font-family:'DM Mono',monospace">₹${fmt(e.total_amount||0)}</strong></td>
+            <td data-label="Status"><span class="job-status ${e.status==='approved'?'status-active':e.status==='rejected'?'status-rework':'status-pending'}">${e.status||'pending'}</span></td>
+            <td data-label="Date">${fmtDate(e.created_at)}</td>
             ${role==='accounts'&&e.status==='pending'?`<td><button class="btn-sm btn-approve" onclick="approveExpense('${e.id}','approved')">Approve</button> <button class="btn-sm btn-reject" onclick="approveExpense('${e.id}','rejected')">Reject</button></td>`:role==='accounts'?`<td>—</td>`:''}
           </tr>`).join('')}
         </tbody>
@@ -565,4 +621,3 @@ function renderJobFinancials() {
       </table>
     </div>`;
 }
-
