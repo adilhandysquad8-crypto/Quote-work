@@ -3,7 +3,7 @@ function openJobDetail(jobId) {
   const job = STATE.data.jobs.find(j => j.id === jobId);
   if (!job) return;
   const role = STATE.role;
-  const quote = STATE.data.quotations.find(q => q.job_id === jobId && (q.status === 'approved' || q.status === 'sent'));
+  const quote = STATE.data.quotations.filter(q => q.job_id === jobId && q.status !== 'rejected').sort((a,b) => b.version - a.version)[0];
   const payments = STATE.data.payments.filter(p => p.job_id === jobId);
   const expenses = STATE.data.expenses.filter(e => e.job_id === jobId);
   const visit = STATE.data.siteVisits.find(v => v.job_id === jobId);
@@ -173,10 +173,12 @@ async function submitExpense() {
   if (!desc || !amt) { showToast('Fill all required fields', 'error'); return; }
   const { error } = await sb.from('expenses').insert({
     job_id: jobId, description: desc, total_amount: amt,
-    proof_url: proof, added_by: STATE.profile?.id, status: 'pending'
+    proof_url: proof,
+    added_by: STATE.profile?.id,   // schema field
+    status: 'pending'
   });
   if (error) { showToast('Error: ' + error.message, 'error'); return; }
-  showToast('Expense added!', 'success');
+  showToast('Expense added — pending approval', 'success');
   closeModal(); loadAllData();
 }
 
@@ -312,4 +314,3 @@ async function submitDailyReport() {
   showToast('Daily report submitted!', 'success');
   closeModal(); loadAllData();
 }
-
