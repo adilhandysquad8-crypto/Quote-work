@@ -239,10 +239,61 @@ async function submitAssignManager() {
   closeModal(); loadAllData();
 }
 
-function releaseFundsForm() {
-  return `<div class="form-row-single form-group"><label class="form-label">Amount to Release (₹)</label><input class="form-input" id="f-rfamt" type="number" placeholder="0"/></div>
-    <div class="form-row"><div class="form-group"><label class="form-label">Release Method</label><select class="form-select" id="f-rfmethod"><option value="cash">Cash</option><option value="bank">Bank Transfer</option><option value="upi">UPI</option></select></div>
-    <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="f-rfnote" placeholder="Reference/note"/></div></div>
-    <div class="form-actions"><button class="btn-cancel" onclick="closeModal()">Cancel</button><button class="btn-submit" onclick="closeModal();showToast('Fund release recorded!','success')">Release Funds</button></div>`;
+function releaseFundsForm(advanceId) {
+  const advances = STATE.data.advances.filter(a => a.status === 'approved');
+  const advOptions = advances.length > 0
+    ? advances.map(a => `<option value="${a.id}" ${a.id===advanceId?'selected':''}>${a.jobs?.customer_name||'Job'} — ₹${fmt(a.approved_amount||a.total_amount||0)} approved</option>`).join('')
+    : `<option value="">No approved advances</option>`;
+  return `
+    <div class="form-row-single form-group"><label class="form-label">Advance Request</label>
+      <select class="form-select" id="f-rfadv">${advOptions}</select></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Amount to Release (₹)</label>
+        <input class="form-input" id="f-rfamt" type="number" placeholder="0"/></div>
+      <div class="form-group"><label class="form-label">Release Method</label>
+        <select class="form-select" id="f-rfmethod">
+          <option value="cash">Cash</option>
+          <option value="bank">Bank Transfer</option>
+          <option value="upi">UPI</option>
+        </select></div>
+    </div>
+    <div class="form-row-single form-group"><label class="form-label">Reference / Note</label>
+      <input class="form-input" id="f-rfnote" placeholder="Transaction ID, cheque no, or note"/></div>
+    <div class="form-actions"><button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-submit" onclick="submitFundRelease()">Release Funds</button></div>`;
 }
 
+async function submitFundRelease() {
+  const advId  = document.getElementById('f-rfadv').value;
+  const amount = parseFloat(document.getElementById('f-rfamt').value);
+  const method = document.getElementById('f-rfmethod').value;
+  const note   = document.getElementById('f-rfnote').value.trim();
+  if (!advId || !amount || amount <= 0) { showToast('Select advance and enter amount', 'error'); return; }
+  const adv = STATE.data.advances.find(a => a.id === advId);
+  // Insert fund release record
+  const { error } = await sb.from('fund_releases').insert({
+    job_id: adv?.job_id,
+    advance_request_id: advId,
+    amount, release_method: method, note,
+    released_by: STATE.profile?.id
+  });
+  if (error) { showToast('Error: ' + error.message, 'error'); return; }
+  // Update advance status to released
+  await sb.from('advance_requests').update({
+    status: 'released',
+    released_amount: amount,
+    released_at: new Date().toISOString()
+  }).eq('id', advId);
+  showToast(`₹${fmt(amount)} released via ${method}!`, 'success');
+  closeModal(); loadAllData();
+}
+
+async function deleteQuotation(qId) {
+  if (!confirm('Delete this quotation draft? This cannot be undone.')) return;
+  // Delete items first
+  await sb.from('quotation_items').delete().eq('quotation_id', qId);
+  const { error } = await sb.from('quotations').delete().eq('id', qId);
+  if (error) { showToast('Error: ' + error.message, 'error'); return; }
+  showToast('Quotation deleted', 'success');
+  loadAllData();
+}
