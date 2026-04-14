@@ -21,19 +21,19 @@ function jobsList(jobs, role) {
     </div>`).join('');
 }
 
-function jobsWithProgress(jobs) {
+function jobsWithProgress(jobs, showTracker) {
   if (!jobs || jobs.length === 0) return `<div class="empty-state"><div class="empty-icon">▣</div><div class="empty-text">No jobs assigned</div></div>`;
   return jobs.map(j => {
     const prog = jobProgress(j);
-    return `<div class="job-item" onclick="openJobDetail('${j.id}')">
+    return `<div class="job-item" style="cursor:pointer">
       <div class="job-dot" style="background:${dotColor(j.status)}"></div>
-      <div class="job-info">
+      <div class="job-info" onclick="openJobDetail('${j.id}')">
         <div class="job-name">${j.customer_name||'—'}</div>
-        <div class="job-meta">${j.location_text||'No location'}</div>
-        <div class="progress-bar"><div class="progress-fill" style="width:${prog}%"></div></div>
+        <div class="job-meta">${j.location_text||'No location'} · <span class="job-status ${jobStatusClass(j.status)}" style="font-size:10px;padding:1px 5px">${j.status}</span></div>
+        <div class="progress-bar" style="margin-top:4px"><div class="progress-fill" style="width:${prog}%"></div></div>
         <div class="text-sm text-muted">${prog}% complete</div>
       </div>
-      <span class="job-status ${jobStatusClass(j.status)}">${j.status||'—'}</span>
+      ${showTracker ? `<button class="btn-sm btn-verify" style="flex-shrink:0;margin-left:8px;white-space:nowrap" onclick="openJobTracker('${j.id}')">📊 Track</button>` : ''}
     </div>`;
   }).join('');
 }
@@ -189,4 +189,3 @@ function expensesList(items) {
       <span class="exp-status ${e.status==='approved'?'exp-appr':e.status==='rejected'?'exp-rej':'exp-pend'}">${e.status||'pending'}</span>
     </div>`).join('');
 }
-
