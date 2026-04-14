@@ -42,9 +42,10 @@ async function finalizeQuotation(id) {
 }
 
 async function completeVisit(id) {
+  const visit = STATE.data.siteVisits.find(v => v.id === id);
   const { error } = await sb.from('site_visits').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', id);
   if (error) { showToast('Error: ' + error.message, 'error'); return; }
-  showToast('Site visit marked complete!', 'success');
+  showToast('Site visit complete! Use "Request Quotation" to move to next stage.', 'success');
   loadAllData();
 }
 
@@ -81,7 +82,7 @@ function dotColor(status) {
   const map = { active:'#4CAF50', completed:'#9C27B0', pending:'#FF9800', delayed:'#EF5350', rework:'#EF5350', site_visit:'#2196F3', quotation:'#1976D2', new:'#2196F3', contacted:'#FF9800', converted:'#4CAF50', lost:'#EF5350' };
   return map[status] || '#94A3B8';
 }
-function jobStatusClass(s) { const m={active:'status-active',completed:'status-done',pending:'status-pending',delayed:'status-rework',rework:'status-rework',site_visit:'status-review',quotation:'status-review'}; return m[s]||'status-pending'; }
+function jobStatusClass(s) { const m={active:'status-active',completed:'status-done',pending:'status-pending',pending_approval:'status-review',delayed:'status-rework',rework:'status-rework',site_visit:'status-review',quotation:'status-review'}; return m[s]||'status-pending'; }
 function leadStatusClass(s) { const m={new:'status-review',contacted:'status-pending',site_visit_requested:'status-review',converted:'status-active',lost:'status-rework'}; return m[s]||'status-pending'; }
 function quoteStatusClass(s) { const m={draft:'status-pending',reviewed:'status-review',sent:'status-review',approved:'status-active',rejected:'status-rework'}; return m[s]||'status-pending'; }
 function payStatusClass(s) { const m={pending:'status-pending',verified:'status-active',rejected:'status-rework'}; return m[s]||'status-pending'; }
@@ -89,7 +90,7 @@ function advStatusClass(s) { const m={pending:'status-pending',approved:'status-
 function visitStatusClass(s) { const m={scheduled:'status-review',completed:'status-active',rescheduled:'status-pending'}; return m[s]||'status-pending'; }
 function reworkStatusClass(s) { const m={pending:'status-pending',approved:'status-active',rejected:'status-rework',completed:'status-done'}; return m[s]||'status-pending'; }
 function jobProgress(j) {
-  const statMap = { new:0, site_visit:10, quotation:25, pending:30, active:60, rework:70, completed:100, delayed:50 };
+  const statMap = { site_visit:10, quotation:30, pending_approval:50, active:70, completed:100, delayed:55, rework:65 };
   return statMap[j?.status] || 0;
 }
 
