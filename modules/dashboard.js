@@ -121,12 +121,12 @@ function renderManagerDashboard() {
       ${statCard('Assigned Jobs', myJobs.length, '#1976D2', 'badge-info', 'Active')}
       ${statCard('Reports Pending', pendingReports, '#EF5350', pendingReports>0?'badge-danger':'badge-up', pendingReports>0?'Due today':'All done')}
       ${statCard('Advance Balance', '₹'+fmt(balance), '#42A5F5', balance>0?'badge-up':'badge-danger', balance>0?'Available':'Overspent')}
-      ${statCard('Active Expenses', d.expenses.filter(e=>e.status==='pending').length, '#F59E0B', 'badge-warn', 'Awaiting approval')}
+      ${statCard('Pending Expenses', d.expenses.filter(e=>e.status==='pending'&&e.added_by===STATE.profile?.id).length, '#F59E0B', 'badge-warn', 'Awaiting approval')}
     </div>
     <div class="two-col">
       <div class="card">
         <div class="card-header"><span class="card-title">My Jobs with Progress</span><span class="card-link" onclick="renderPage('jobs')">View all</span></div>
-        ${jobsWithProgress(myJobs.slice(0, 5))}
+        ${jobsWithProgress(myJobs.slice(0, 5), true)}
       </div>
       <div class="card">
         <div class="card-header"><span class="card-title">Quick Actions</span></div>
