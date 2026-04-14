@@ -188,3 +188,120 @@ function getJobProgress(job) {
   const map = { site_visit:10, quotation:30, pending_approval:50, active:70, completed:100, delayed:60, rework:65 };
   return map[job?.status] || 0;
 }
+
+// ─── JOB START/END DATE & TRACKER ────────────────────────────────
+// We store start_date and end_date in Supabase using a simple approach:
+// A job gets its start tracked when confirmStartWork is called (stored via description append)
+// For proper tracking we use daily_reports count vs plan
+
+function openJobTracker(jobId) {
+  const job = STATE.data.jobs.find(j => j.id === jobId);
+  if (!job) return;
+  const reports = STATE.data.dailyReports.filter(r => r.job_id === jobId).sort((a,b) => new Date(a.date)-new Date(b.date));
+  const plans   = STATE.data.dailyPlans.filter(p => p.job_id === jobId);
+  const expenses = STATE.data.expenses.filter(e => e.job_id === jobId);
+  const quote   = STATE.data.quotations.filter(q => q.job_id === jobId && q.status !== 'rejected').sort((a,b) => b.version - a.version)[0];
+
+  const totalExpApproved = expenses.filter(e=>e.status==='approved').reduce((s,e)=>s+(e.total_amount||0),0);
+  const totalExpPending  = expenses.filter(e=>e.status==='pending').reduce((s,e)=>s+(e.total_amount||0),0);
+  const quoted = quote?.final_amount || 0;
+
+  const firstReport = reports[0]?.date;
+  const lastReport  = reports[reports.length-1]?.date;
+
+  document.getElementById('modal-title').textContent = `📊 Job Tracker — ${job.customer_name}`;
+  document.getElementById('modal-body').innerHTML = `
+  <div style="max-height:70vh;overflow-y:auto">
+
+    <!-- Header info -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <div style="background:var(--blue-50);border-radius:8px;padding:12px">
+        <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;margin-bottom:4px">Status</div>
+        <span class="job-status ${jobStatusClass(job.status)}">${job.status}</span>
+      </div>
+      <div style="background:var(--gray-50);border-radius:8px;padding:12px">
+        <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;margin-bottom:4px">Work Days</div>
+        <div style="font-weight:700;font-size:18px">${reports.length} <span style="font-size:12px;color:var(--gray-500)">days logged</span></div>
+      </div>
+      <div style="background:var(--green-50);border-radius:8px;padding:12px">
+        <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;margin-bottom:4px">Start Date</div>
+        <div style="font-weight:600">${firstReport ? fmtDate(firstReport) : 'Not started'}</div>
+      </div>
+      <div style="background:${job.status==='completed'?'var(--green-50)':'var(--amber-50)'};border-radius:8px;padding:12px">
+        <div style="font-size:11px;color:var(--gray-500);text-transform:uppercase;margin-bottom:4px">Last Activity</div>
+        <div style="font-weight:600">${lastReport ? fmtDate(lastReport) : '—'}</div>
+      </div>
+    </div>
+
+    <!-- Set target end date -->
+    ${job.status === 'active' ? `
+    <div style="background:var(--amber-50);border:1px solid var(--amber-100);border-radius:8px;padding:12px;margin-bottom:16px">
+      <div style="font-weight:600;margin-bottom:8px;font-size:13px">Set Target Completion Date</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="form-input" type="date" id="f-target-date" style="flex:1;font-size:13px;padding:8px 10px"
+          value="${job.target_date||''}" min="${new Date().toISOString().split('T')[0]}"/>
+        <button class="btn-sm btn-approve" onclick="setJobTargetDate('${job.id}')">Set Date</button>
+      </div>
+      ${job.description?.includes('TARGET:') ? `<div style="margin-top:6px;font-size:12px;color:var(--amber-700)">Current target: <strong>${job.description.match(/TARGET:([\d-]+)/)?.[1]||'not set'}</strong></div>` : ''}
+    </div>` : ''}
+
+    <!-- Financial tracker -->
+    <div style="margin-bottom:16px">
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px">Financial Tracker</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:var(--blue-50);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:11px;color:var(--gray-500)">Quoted</div>
+          <div style="font-weight:700;font-size:16px;color:var(--blue-700)">₹${fmt(quoted)}</div>
+        </div>
+        <div style="background:var(--green-50);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:11px;color:var(--gray-500)">Expenses Approved</div>
+          <div style="font-weight:700;font-size:16px;color:var(--green-700)">₹${fmt(totalExpApproved)}</div>
+        </div>
+        <div style="background:var(--amber-50);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:11px;color:var(--gray-500)">Expenses Pending</div>
+          <div style="font-weight:700;font-size:16px;color:var(--amber-700)">₹${fmt(totalExpPending)}</div>
+        </div>
+        <div style="background:${quoted-totalExpApproved>=0?'var(--green-50)':'var(--red-50)'};border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:11px;color:var(--gray-500)">Balance</div>
+          <div style="font-weight:700;font-size:16px;color:${quoted-totalExpApproved>=0?'var(--green-700)':'var(--red-700)'}">₹${fmt(quoted-totalExpApproved)}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Daily reports timeline -->
+    <div>
+      <div style="font-weight:600;font-size:13px;margin-bottom:8px">Daily Work Log (${reports.length} entries)</div>
+      ${reports.length === 0
+        ? `<div style="text-align:center;padding:16px;color:var(--gray-400);font-size:13px">No reports submitted yet</div>`
+        : reports.slice().reverse().map(r => `
+          <div style="border:1px solid var(--gray-200);border-radius:8px;padding:10px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+              <strong style="font-size:13px">${fmtDate(r.date)}</strong>
+              <span style="font-size:12px;color:var(--gray-500)">${r.labor_used||0} workers · ₹${fmt(r.actual_expense||0)}</span>
+            </div>
+            <div style="font-size:13px;color:var(--gray-700);margin-bottom:2px">${r.actual_tasks||'—'}</div>
+            <div style="font-size:12px;color:var(--blue-600)">${r.progress_done||''}</div>
+            ${r.issues?`<div style="font-size:12px;color:var(--red-700);margin-top:3px">⚠ ${r.issues}</div>`:''}
+          </div>`).join('')
+      }
+    </div>
+  </div>
+  <div class="form-actions">
+    <button class="btn-cancel" onclick="closeModal()">Close</button>
+    ${STATE.role==='manager'?`<button class="btn-submit" onclick="closeModal();openModal('daily-report')">+ Add Report</button>`:''}
+  </div>`;
+  document.getElementById('modal-backdrop').classList.add('open');
+}
+
+async function setJobTargetDate(jobId) {
+  const date = document.getElementById('f-target-date').value;
+  if (!date) { showToast('Pick a date', 'error'); return; }
+  const job = STATE.data.jobs.find(j => j.id === jobId);
+  // Store target date in description field as a tag
+  let desc = (job.description || '').replace(/\s*TARGET:[\d-]+/g, '');
+  desc = desc + ` TARGET:${date}`;
+  const { error } = await sb.from('jobs').update({ description: desc.trim() }).eq('id', jobId);
+  if (error) { showToast('Error: ' + error.message, 'error'); return; }
+  showToast(`Target date set: ${fmtDate(date)}`, 'success');
+  closeModal(); loadAllData();
+}
