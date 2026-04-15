@@ -107,17 +107,47 @@ function showToast(msg, type = '') {
 }
 
 // ─── CONVERT LEAD TO SITE VISIT (Scheduling) ─────────────────────
-async function convertLeadToVisit(leadId) {
+function convertLeadToVisit(leadId) {
   const lead = STATE.data.leads.find(l => l.id === leadId);
-  if (!lead) return;
+  if (!lead) { showToast('Lead not found', 'error'); return; }
 
-  const dateInput = prompt('Schedule visit date & time (YYYY-MM-DDTHH:MM):', 
-    new Date(Date.now() + 86400000).toISOString().slice(0,16));
-  if (!dateInput) return;
+  const managers = STATE.data.allUsers?.filter(u => u.role === 'manager') || [];
+  const managerOpts = managers.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0,16);
 
-  // Check if a job already exists for this lead
+  document.getElementById('modal-title').textContent = 'Schedule Site Visit';
+  document.getElementById('modal-body').innerHTML = `
+    <div style="background:var(--blue-50);border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-weight:600">${lead.customer_name}</div>
+      <div style="font-size:12px;color:var(--gray-500)">${lead.location_text||''} · ${lead.customer_phone||''}</div>
+      <div style="font-size:12px;color:var(--gray-600);margin-top:4px">${lead.requirement_summary||''}</div>
+    </div>
+    <div class="form-row-single form-group">
+      <label class="form-label">Visit Date & Time</label>
+      <input class="form-input" type="datetime-local" id="f-sv-date" value="${tomorrow}"/>
+    </div>
+    <div class="form-row-single form-group">
+      <label class="form-label">Assign Manager</label>
+      <select class="form-select" id="f-sv-manager">
+        <option value="">— Select Manager —</option>
+        ${managerOpts}
+      </select>
+    </div>
+    <div class="form-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-submit" onclick="submitScheduleVisit('${leadId}')">Schedule Visit</button>
+    </div>`;
+  document.getElementById('modal-backdrop').classList.add('open');
+}
+
+async function submitScheduleVisit(leadId) {
+  const lead = STATE.data.leads.find(l => l.id === leadId);
+  const dateInput  = document.getElementById('f-sv-date').value;
+  const managerId  = document.getElementById('f-sv-manager').value;
+  if (!dateInput) { showToast('Pick a date and time', 'error'); return; }
+
+  // Step 1: find or create job for this lead
   let job = STATE.data.jobs.find(j => j.lead_id === leadId);
-
   if (!job) {
     const { data: newJob, error: jobErr } = await sb.from('jobs').insert({
       lead_id: leadId,
@@ -127,18 +157,22 @@ async function convertLeadToVisit(leadId) {
       location_link: lead.location_link,
       description: lead.requirement_summary,
       status: 'site_visit',
-      created_by: STATE.profile?.id
+      created_by: STATE.profile?.id,
+      assigned_manager_id: managerId || null
     }).select().single();
     if (jobErr) { showToast('Error creating job: ' + jobErr.message, 'error'); return; }
     job = newJob;
+  } else if (managerId) {
+    // Update manager on existing job
+    await sb.from('jobs').update({ assigned_manager_id: managerId }).eq('id', job.id);
   }
 
-  // Check if a site visit already exists for this job
+  // Step 2: find or update site visit (never create duplicates)
   const existingVisit = STATE.data.siteVisits.find(v => v.job_id === job.id);
   if (existingVisit) {
-    // Update the date instead
     const { error } = await sb.from('site_visits').update({
       scheduled_date: dateInput,
+      assigned_to: managerId || STATE.profile?.id,
       status: 'scheduled',
       updated_at: new Date().toISOString()
     }).eq('id', existingVisit.id);
@@ -147,15 +181,15 @@ async function convertLeadToVisit(leadId) {
     const { error } = await sb.from('site_visits').insert({
       job_id: job.id,
       scheduled_date: dateInput,
-      assigned_to: STATE.profile?.id,
+      assigned_to: managerId || STATE.profile?.id,
       status: 'scheduled'
     });
     if (error) { showToast('Error: ' + error.message, 'error'); return; }
   }
 
-  // Update lead status
+  // Step 3: update lead status
   await sb.from('sales_leads').update({ status: 'site_visit_requested' }).eq('id', leadId);
 
-  showToast('Site visit scheduled!', 'success');
-  loadAllData();
+  showToast(`Site visit scheduled for ${lead.customer_name}!`, 'success');
+  closeModal(); loadAllData();
 }
