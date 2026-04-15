@@ -99,7 +99,7 @@ async function submitNewLead() {
   const { data: leadData, error } = await sb.from('sales_leads').insert({
     customer_name: name, customer_phone: phone,
     location_text: locText, location_link: locLink,
-    requirement_summary: req, status: 'site_visit_requested',
+    requirement_summary: req, status: 'new',
     assigned_to: STATE.profile.id
   }).select().single();
   if (error) {
@@ -108,29 +108,7 @@ async function submitNewLead() {
     return;
   }
 
-  // Auto-create a Job so scheduling can see it and schedule a site visit
-  const { data: jobData, error: jobError } = await sb.from('jobs').insert({
-    lead_id: leadData.id,
-    customer_name: name,
-    customer_phone: phone,
-    location_text: locText,
-    location_link: locLink,
-    description: req,
-    status: 'site_visit',
-    created_by: STATE.profile.id
-  }).select().single();
-
-  if (jobData) {
-    // Auto-create a pending site visit for scheduling to assign
-    await sb.from('site_visits').insert({
-      job_id: jobData.id,
-      scheduled_date: new Date(Date.now() + 86400000).toISOString(), // default: tomorrow
-      assigned_to: STATE.profile.id,
-      status: 'scheduled'
-    });
-  }
-
-  showToast('Lead created! Site visit scheduled for review.', 'success');
+  showToast('Lead created! Scheduling will arrange the site visit.', 'success');
   closeModal(); loadAllData();
 }
 
