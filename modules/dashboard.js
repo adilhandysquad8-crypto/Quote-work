@@ -107,7 +107,9 @@ function renderSchedulingDashboard() {
 
 function renderManagerDashboard() {
   const d = STATE.data;
-  const myJobs = d.jobs;
+  const uid = STATE.profile?.id;
+  const myJobs = d.jobs.filter(j => j.assigned_manager_id === uid || d.siteVisits.some(v => v.assigned_to === uid && v.job_id === j.id));
+  const myVisits = d.siteVisits.filter(v => v.assigned_to === uid && v.status === 'scheduled');
   const pendingReports = d.dailyPlans.filter(p => {
     const today = new Date().toISOString().split('T')[0];
     return p.date === today && !d.dailyReports.find(r => r.job_id === p.job_id && r.date === today);
@@ -119,23 +121,45 @@ function renderManagerDashboard() {
   return `
     <div class="stats-grid">
       ${statCard('Assigned Jobs', myJobs.length, '#1976D2', 'badge-info', 'Active')}
-      ${statCard('Reports Pending', pendingReports, '#EF5350', pendingReports>0?'badge-danger':'badge-up', pendingReports>0?'Due today':'All done')}
+      ${statCard('Site Visits', myVisits.length, '#2196F3', myVisits.length>0?'badge-warn':'badge-up', myVisits.length>0?'Upcoming':'Clear')}
       ${statCard('Advance Balance', '₹'+fmt(balance), '#42A5F5', balance>0?'badge-up':'badge-danger', balance>0?'Available':'Overspent')}
-      ${statCard('Pending Expenses', d.expenses.filter(e=>e.status==='pending'&&e.added_by===STATE.profile?.id).length, '#F59E0B', 'badge-warn', 'Awaiting approval')}
+      ${statCard('Pending Expenses', d.expenses.filter(e=>e.status==='pending'&&e.added_by===uid).length, '#F59E0B', 'badge-warn', 'Awaiting approval')}
     </div>
+
+    ${myVisits.length > 0 ? `
+    <div class="card" style="margin-bottom:16px;border-left:4px solid var(--blue-500)">
+      <div class="card-header"><span class="card-title">📍 Upcoming Site Visits</span></div>
+      <div class="card-body" style="padding:0">
+        ${myVisits.map(v => {
+          const job = d.jobs.find(j => j.id === v.job_id);
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--gray-100)">
+            <div>
+              <div style="font-weight:600">${job?.customer_name||'—'}</div>
+              <div style="font-size:12px;color:var(--gray-500)">${job?.location_text||''} · ${fmtDateTime(v.scheduled_date)}</div>
+              <div style="font-size:12px;color:var(--gray-600);margin-top:2px">${job?.description||''}</div>
+            </div>
+            <div style="display:flex;gap:6px">
+              ${job?.location_link?`<a href="${job.location_link}" target="_blank" class="btn-sm btn-verify" style="text-decoration:none">📍 Map</a>`:''}
+              <button class="btn-sm btn-approve" onclick="completeVisitAndAdvance('${v.id}','${v.job_id}')">✓ Done</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : ''}
+
     <div class="two-col">
       <div class="card">
-        <div class="card-header"><span class="card-title">My Jobs with Progress</span><span class="card-link" onclick="renderPage('jobs')">View all</span></div>
+        <div class="card-header"><span class="card-title">My Jobs</span><span class="card-link" onclick="renderPage('jobs')">View all</span></div>
         ${jobsWithProgress(myJobs.slice(0, 5), true)}
       </div>
       <div class="card">
         <div class="card-header"><span class="card-title">Quick Actions</span></div>
         <div class="card-body">
           <div class="quick-actions">
-            <button class="qa-btn" onclick="openModal('daily-plan')"><span class="qa-icon">+</span>Add Daily Plan</button>
-            <button class="qa-btn" onclick="openModal('daily-report')"><span class="qa-icon">✓</span>Submit Report</button>
-            <button class="qa-btn" onclick="openModal('new-expense')"><span class="qa-icon">◈</span>Add Expense</button>
-            <button class="qa-btn" onclick="openModal('new-quotation')"><span class="qa-icon">◎</span>Draft Quotation</button>
+            <button class="qa-btn" onclick="openModal('daily-plan')"><span class="qa-icon">+</span>Daily Plan</button>
+            <button class="qa-btn" onclick="openModal('daily-report')"><span class="qa-icon">✓</span>Report</button>
+            <button class="qa-btn" onclick="openModal('new-expense')"><span class="qa-icon">◈</span>Expense</button>
+            <button class="qa-btn" onclick="openModal('new-quotation')"><span class="qa-icon">◎</span>Quotation</button>
           </div>
         </div>
       </div>
