@@ -2,6 +2,7 @@
 function renderLeads() {
   const d = STATE.data;
   const role = STATE.role;
+  if (!FILTERS['leads']) FILTERS['leads'] = {};
   const filtered = applyFilters(d.leads, 'leads', { searchFields: ['customer_name','location_text','requirement_summary','customer_phone'] });
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -25,8 +26,16 @@ function renderLeads() {
             <td data-label="Requirement" style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.requirement_summary||'—'}</td>
             <td data-label="Status"><span class="job-status ${leadStatusClass(l.status)}">${(l.status||'—').replace(/_/g,' ')}</span></td>
             <td data-label="Created">${fmtDate(l.created_at)}</td>
-            <td data-label="Actions">${role==='scheduling'&&(l.status==='new'||l.status==='site_visit_requested')?
-              `<button class="btn-sm btn-approve" onclick="convertLeadToVisit('${l.id}')">Schedule Visit</button>`:'—'}
+            <td data-label="Actions">
+              ${role==='scheduling'&&(l.status==='new'||l.status==='site_visit_requested')?
+                `<button class="btn-sm btn-approve" onclick="convertLeadToVisit('${l.id}')">Schedule Visit</button>`:''
+              }
+              ${(()=>{
+                const sv = STATE.data.siteVisits.find(v=>STATE.data.jobs.find(j=>j.lead_id===l.id)&&v.job_id===STATE.data.jobs.find(j=>j.lead_id===l.id)?.id);
+                return sv&&role==='sales'&&sv.status==='scheduled'?
+                  `<button class="btn-sm" style="background:var(--red-50);color:var(--red-700);border:1px solid var(--red-100)" onclick="deleteSiteVisit('${sv.id}','${l.id}')">✕ Cancel Visit</button>`:'';
+              })()}
+              ${!['scheduling'].includes(role)&&role!=='sales'?'—':''}
             </td>
           </tr>`).join('')}
         </tbody>
@@ -42,6 +51,7 @@ function renderJobs() {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="text-muted text-sm">${filtered.length} of ${d.jobs.length} jobs</div>
     </div>
+    ${!FILTERS['jobs']?(FILTERS['jobs']={},''):''} 
     ${filterBar('jobs', {
       searchPlaceholder: 'Search customer, location...',
       statuses: ['site_visit','quotation','pending_approval','active','completed','delayed','rework'],
@@ -49,17 +59,20 @@ function renderJobs() {
     })}
     <div class="table-wrap">
       <table>
-        <thead><tr><th>#</th><th>Customer</th><th>Location</th>${role==='scheduling'?'<th>Manager</th>':''}<th>Status</th>${role!=='sales'?'<th>Progress</th>':''}${role!=='sales'?'<th>Quoted</th>':''}<th>Created</th></tr></thead>
+        <thead><tr><th>#</th><th>Customer</th><th>Location</th>${role==='scheduling'?'<th>Manager</th>':''}<th>Status</th>${role==='sales'?'<th>Site Visit</th><th>Quotation</th>':''}${role!=='sales'?'<th>Progress</th>':''}${role!=='sales'?'<th>Quoted</th>':''}<th>Created</th></tr></thead>
         <tbody>
         ${filtered.length === 0 ? `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">▣</div><div class="empty-text">No jobs match filters</div></div></td></tr>` :
           filtered.map((j,i) => {
             const bestQuote = d.quotations.filter(q=>q.job_id===j.id&&q.status!=='rejected').sort((a,b)=>b.version-a.version)[0];
+            const visit = d.siteVisits.find(v=>v.job_id===j.id);
             return `<tr onclick="openJobDetail('${j.id}')" style="cursor:pointer">
               <td data-label="#"><span style="font-size:11px;color:var(--gray-400);font-family:monospace">${j.id?.substring(0,6).toUpperCase()}</span></td>
               <td data-label="Customer"><strong>${j.customer_name||'—'}</strong></td>
               <td data-label="Location">${j.location_link ? `<a href="${j.location_link}" target="_blank" class="loc-badge" onclick="event.stopPropagation()">📍 Map</a>` : j.location_text||'—'}</td>
               ${role==='scheduling'?`<td data-label="Manager">${j.users?.name||'Unassigned'}</td>`:''}
               <td data-label="Status"><span class="job-status ${jobStatusClass(j.status)}">${(j.status||'—').replace(/_/g,' ')}</span></td>
+              ${role==='sales'?`<td data-label="Site Visit">${visit?`<span class="job-status ${visitStatusClass(visit.status)}" style="font-size:11px">${visit.status}</span> ${fmtDate(visit.scheduled_date)}`:'<span style="color:var(--gray-400);font-size:12px">Not scheduled</span>'}</td>`:''}
+              ${role==='sales'?`<td data-label="Quotation">${bestQuote?`<strong>₹${fmt(bestQuote.final_amount||0)}</strong> <span class="job-status ${quoteStatusClass(bestQuote.status)}" style="font-size:10px">${bestQuote.status}</span>`:'<span style="color:var(--gray-400);font-size:12px">No quote</span>'}</td>`:''}
               ${role!=='sales'?`<td data-label="Progress"><div class="progress-bar"><div class="progress-fill" style="width:${jobProgress(j)}%"></div></div><div class="text-sm text-muted">${jobProgress(j)}%</div></td>`:''}
               ${role!=='sales'?`<td data-label="Quoted"><strong style="color:var(--blue-700)">₹${fmt(bestQuote?.final_amount||0)}</strong></td>`:''}
               <td data-label="Created">${fmtDate(j.created_at)}</td>
@@ -74,6 +87,7 @@ function renderQuotations() {
   const d = STATE.data;
   const role = STATE.role;
   // Custom filter: search by customer name via joined jobs
+  if (!FILTERS['quotations']) FILTERS['quotations'] = {};
   const f = FILTERS['quotations'] || {};
   let filtered = d.quotations;
   if (f.search) {
@@ -308,6 +322,7 @@ function downloadQuotationPDF(qId) {
 function renderPayments() {
   const d = STATE.data;
   const role = STATE.role;
+  if (!FILTERS['payments']) FILTERS['payments'] = {};
   const f = FILTERS['payments'] || {};
   let filtered = d.payments;
   if (f.search) { const q=f.search.toLowerCase(); filtered=filtered.filter(p=>(p.jobs?.customer_name||'').toLowerCase().includes(q)); }
@@ -319,7 +334,7 @@ function renderPayments() {
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="text-muted text-sm">${filtered.length} payments · Total: <strong>₹${fmt(total)}</strong></div>
-      ${role==='sales'?`<button class="btn-submit" onclick="openModal('upload-payment')">↑ Upload Proof</button>`:''}
+      ${role==='sales'?`<button class="btn-submit" onclick="${STATE.data.jobs.length>0?`openModal('upload-payment')`:`showToast('No jobs found. Leads must be converted to jobs first.','error')`}">↑ Upload Proof</button>`:''}
     </div>
     ${filterBar('payments',{searchPlaceholder:'Search customer...',statuses:['pending','verified','rejected'],dateFilter:true})}
     <div class="table-wrap">
@@ -345,6 +360,7 @@ function renderPaymentHistory() { return renderPayments(); }
 function renderExpenses() {
   const d = STATE.data;
   const role = STATE.role;
+  if (!FILTERS['expenses']) FILTERS['expenses'] = {};
   const f = FILTERS['expenses'] || {};
   let filtered = d.expenses;
   if (f.search) { const q=f.search.toLowerCase(); filtered=filtered.filter(e=>(e.jobs?.customer_name||e.description||'').toLowerCase().includes(q)); }
