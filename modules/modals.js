@@ -113,7 +113,16 @@ async function submitNewLead() {
 }
 
 function uploadPaymentForm() {
-  return `<div class="form-row-single form-group"><label class="form-label">Job</label><select class="form-select" id="f-pjob">${jobOptions()}</select></div>
+  const jobs = STATE.data.jobs;
+  if (jobs.length === 0) {
+    return `<div style="text-align:center;padding:20px;color:var(--gray-500)">
+      <div style="font-size:32px;margin-bottom:8px">📋</div>
+      <div style="font-weight:600;margin-bottom:4px">No jobs available</div>
+      <div style="font-size:13px">Payments can only be uploaded once a site visit has been scheduled by scheduling team.</div>
+      <div class="form-actions"><button class="btn-cancel" onclick="closeModal()">Close</button></div>
+    </div>`;
+  }
+  return `<div class="form-row-single form-group"><label class="form-label">Job / Customer</label><select class="form-select" id="f-pjob">${jobOptions()}</select></div>
     <div class="form-row"><div class="form-group"><label class="form-label">Payment Type</label><select class="form-select" id="f-ptype"><option value="advance">Advance</option><option value="final">Final</option></select></div>
     <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-input" id="f-pamount" type="number" placeholder="0"/></div></div>
     <div class="form-row-single form-group"><label class="form-label">Proof URL / Reference</label><input class="form-input" id="f-pproof" placeholder="Screenshot URL or reference number"/></div>
