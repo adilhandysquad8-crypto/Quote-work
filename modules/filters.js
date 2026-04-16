@@ -1,4 +1,8 @@
 // ─── PAGE RENDERERS ──────────────────────────────────────────────
+// ─── GLOBAL FILTER STATE ────────────────────────────────────────
+var FILTERS = {};   // stores filter values per page: { leads: {search, status, dateFrom, dateTo}, ... }
+
+// rest of your existing code (applyFilters, filterBar, etc.)
 function renderLeads() {
   const d = STATE.data;
   const role = STATE.role;
