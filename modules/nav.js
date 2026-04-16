@@ -6,9 +6,7 @@ async function loadAllData() {
 
     const [leads, jobs, quotations, payments, expenses, advances, releases, plans, reports, reworks, visits, allUsers] = await Promise.all([
       sb.from('sales_leads').select('*').order('created_at', { ascending: false }),
-      role === 'manager' && uid
-        ? sb.from('jobs').select('*, users!jobs_assigned_manager_id_fkey(name)').eq('assigned_manager_id', uid).order('created_at', { ascending: false })
-        : sb.from('jobs').select('*, users!jobs_assigned_manager_id_fkey(name)').order('created_at', { ascending: false }),
+      sb.from('jobs').select('*, users!jobs_assigned_manager_id_fkey(name)').order('created_at', { ascending: false }),
       sb.from('quotations').select('*, jobs(customer_name), quotation_items(*)').order('created_at', { ascending: false }),
       sb.from('payments').select('*, jobs(customer_name)').order('created_at', { ascending: false }),
       sb.from('expenses').select('*, expense_items(*), jobs(customer_name)').order('created_at', { ascending: false }),
@@ -199,4 +197,3 @@ function renderPage(pageId) {
   closeSidebar();
   updateBottomNav(pageId);
 }
-
