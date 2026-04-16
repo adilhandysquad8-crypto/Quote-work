@@ -193,3 +193,14 @@ async function submitScheduleVisit(leadId) {
   showToast(`Site visit scheduled for ${lead.customer_name}!`, 'success');
   closeModal(); loadAllData();
 }
+
+// ─── DELETE SITE VISIT (Sales — only before work starts) ─────────
+async function deleteSiteVisit(visitId, leadId) {
+  if (!confirm('Cancel this site visit? This cannot be undone.')) return;
+  const { error } = await sb.from('site_visits').delete().eq('id', visitId);
+  if (error) { showToast('Error: ' + error.message, 'error'); return; }
+  // Reset lead status back to new
+  if (leadId) await sb.from('sales_leads').update({ status: 'new' }).eq('id', leadId);
+  showToast('Site visit cancelled.', 'success');
+  loadAllData();
+}
