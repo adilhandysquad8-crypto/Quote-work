@@ -92,7 +92,7 @@ function renderAccountsDashboard() {
             const exp = d.expenses.filter(e=>e.job_id===j.id&&e.status==='approved').reduce((s,e)=>s+(e.total_amount||0),0);
             const recv = d.payments.filter(p=>p.job_id===j.id&&p.status==='verified').reduce((s,p)=>s+(p.amount||0),0);
             return `<tr onclick="openJobFinanceDetail('${j.id}')" style="cursor:pointer">
-              <td><strong>${j.customer_name||'—'}</strong></td>
+              <td><strong>${esc(j.customer_name||'—')}</strong></td>
               <td><span class="job-status ${jobStatusClass(j.status)}">${(j.status||'').replace(/_/g,' ')}</span></td>
               <td>₹${fmt(q?.final_amount||0)}</td>
               <td style="color:var(--blue-700)">₹${fmt(matReq)}</td>
@@ -124,7 +124,7 @@ function renderAccountsDashboard() {
           const profit = quoted - exp;
           const margin = quoted > 0 ? ((profit/quoted)*100).toFixed(1) : 0;
           return `<tr onclick="openJobFinanceDetail('${j.id}')" style="cursor:pointer">
-            <td><strong>${j.customer_name}</strong></td>
+            <td><strong>${esc(j.customer_name)}</strong></td>
             <td>₹${fmt(quoted)}</td>
             <td style="color:var(--red-700)">₹${fmt(exp)}</td>
             <td style="color:var(--green-700)">₹${fmt(recv)}</td>
@@ -152,7 +152,8 @@ function openJobFinanceDetail(jobId) {
   const profit   = (quote?.profit_added||0);
   const gst      = (quote?.gst||0);
   const finalQ   = quote?.final_amount||0;
-  const margin   = finalQ > 0 ? (((profit)/(finalQ))*100).toFixed(1) : 0;
+  const subtotalQ = matQ + labQ + othQ;
+  const margin   = subtotalQ > 0 ? ((profit / subtotalQ) * 100).toFixed(1) : 0;
 
   const advances = d.advances.filter(a=>a.job_id===jobId);
   const matRel   = advances.filter(a=>a.status==='released').reduce((s,a)=>s+(a.material_amount||0),0);
@@ -168,15 +169,15 @@ function openJobFinanceDetail(jobId) {
   const received  = payments.filter(p=>p.status==='verified').reduce((s,p)=>s+(p.amount||0),0);
   const reports   = d.dailyReports.filter(r=>r.job_id===jobId).sort((a,b)=>new Date(a.date)-new Date(b.date));
 
-  document.getElementById('modal-title').textContent = `Financial Detail — ${job.customer_name}`;
+  document.getElementById('modal-title').textContent = `Financial Detail — ${esc(job.customer_name)}`;
   document.getElementById('modal-body').innerHTML = `
   <div style="max-height:72vh;overflow-y:auto">
 
     <!-- Status bar -->
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
       <span class="job-status ${jobStatusClass(job.status)}">${(job.status||'').replace(/_/g,' ')}</span>
-      <span style="font-size:12px;color:var(--gray-500)">${job.location_text||''}</span>
-      ${job.description?.includes('TARGET:')?`<span style="font-size:12px;color:var(--amber-700)">🗓 Target: ${job.description.match(/TARGET:([\d-]+)/)?.[1]||''}</span>`:''}
+      <span style="font-size:12px;color:var(--gray-500)">${esc(job.location_text||'')}</span>
+      ${(job.target_date||job.description?.includes('TARGET:'))?`<span style="font-size:12px;color:var(--amber-700)">🗓 Target: ${job.target_date||job.description?.match(/TARGET:([\d-]+)/)?.[1]||''}</span>`:''}
     </div>
 
     <!-- Quotation breakdown -->
@@ -267,7 +268,7 @@ function openJobFinanceDetail(jobId) {
             <strong>${fmtDate(r.date)}</strong>
             <span style="color:var(--gray-500)">${r.labor_used||0} workers · ₹${fmt(r.actual_expense||0)}</span>
           </div>
-          <div style="font-size:12px">${r.actual_tasks||'—'}</div>
+          <div style="font-size:12px">${esc(r.actual_tasks||'—')}</div>
           ${r.progress_done?`<div style="font-size:11px;color:var(--blue-600)">${r.progress_done}</div>`:''}
           ${r.issues?`<div style="font-size:11px;color:var(--red-700)">⚠ ${r.issues}</div>`:''}
         </div>`).join('')}
@@ -287,7 +288,7 @@ function openRejectAdvanceModal(advId) {
   document.getElementById('modal-title').textContent = 'Reject Advance Request';
   document.getElementById('modal-body').innerHTML = `
     <div style="background:var(--red-50);border-radius:8px;padding:12px;margin-bottom:14px">
-      <div style="font-weight:600">${STATE.data.jobs.find(j=>j.id===adv?.job_id)?.customer_name||'—'}</div>
+      <div style="font-weight:600">${esc(STATE.data.jobs.find(j=>j.id===adv?.job_id)?.customer_name||'—')}</div>
       <div style="font-size:13px">Requested: <strong>₹${fmt(adv?.total_amount||0)}</strong></div>
     </div>
     <div class="form-row-single form-group">
@@ -307,7 +308,7 @@ async function submitRejectAdvance(advId) {
   const { error } = await sb.from('advance_requests').update({
     status: 'rejected',
     approved_by: STATE.profile?.id,
-    note: `REJECTED: ${reason}`
+    note: `REJECTED: ${esc(reason)}`
   }).eq('id', advId);
   if (error) { showToast('Error: ' + error.message, 'error'); return; }
   showToast('Request rejected with reason noted', 'success');
@@ -334,7 +335,7 @@ function downloadJobFinancePDF(jobId) {
   const profit   = (quote?.final_amount||0) - totalExp;
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>Financial Report — ${job?.customer_name}</title>
+  <title>Financial Report — ${esc(job?.customer_name)}</title>
   <style>
     body{font-family:'Segoe UI',Arial,sans-serif;margin:0;padding:24px;color:#1e293b;font-size:13px}
     h1{font-size:20px;margin:0}.header{display:flex;justify-content:space-between;padding-bottom:16px;border-bottom:3px solid #1976D2;margin-bottom:20px}
@@ -350,7 +351,7 @@ function downloadJobFinancePDF(jobId) {
   </style></head><body>
   <div class="header">
     <div><div class="brand">Handy sQuad</div><div style="color:#64748b;font-size:12px">Field Management System</div></div>
-    <div class="meta"><strong style="font-size:15px;color:#1e293b">${job?.customer_name}</strong><br>${job?.location_text||''}<br>Report: ${new Date().toLocaleDateString('en-IN')}<br>Status: ${(job?.status||'').toUpperCase()}</div>
+    <div class="meta"><strong style="font-size:15px;color:#1e293b">${esc(job?.customer_name)}</strong><br>${esc(job?.location_text||'')}<br>Report: ${new Date().toLocaleDateString('en-IN')}<br>Status: ${(job?.status||'').toUpperCase()}</div>
   </div>
 
   <div class="section">
@@ -378,7 +379,7 @@ function downloadJobFinancePDF(jobId) {
   <div class="section">
     <div class="section-title">Approved Expenses</div>
     <table><thead><tr><th class="th">Description</th><th class="th">Amount</th><th class="th">Date</th></tr></thead>
-    <tbody>${expenses.map(e=>`<tr><td>${e.description||'—'}</td><td>₹${(e.total_amount||0).toLocaleString('en-IN')}</td><td>${new Date(e.created_at).toLocaleDateString('en-IN')}</td></tr>`).join('')}
+    <tbody>${esc(expenses.map(e=>`<tr><td>${e.description||'—')}</td><td>₹${(e.total_amount||0).toLocaleString('en-IN')}</td><td>${new Date(e.created_at).toLocaleDateString('en-IN')}</td></tr>`).join('')}
     <tr class="total-row"><td>Total Expenses</td><td class="red">₹${totalExp.toLocaleString('en-IN')}</td><td></td></tr></tbody></table>
   </div>
 
@@ -403,7 +404,7 @@ function downloadJobFinancePDF(jobId) {
 
   ${reports.length>0?`<div class="section"><div class="section-title">Work Log Summary (${reports.length} days)</div>
   <table><thead><tr><th class="th">Date</th><th class="th">Tasks</th><th class="th">Progress</th><th class="th">Workers</th><th class="th">Expense</th></tr></thead>
-  <tbody>${reports.map(r=>`<tr><td>${new Date(r.date).toLocaleDateString('en-IN')}</td><td>${r.actual_tasks||'—'}</td><td>${r.progress_done||'—'}</td><td>${r.labor_used||0}</td><td>₹${(r.actual_expense||0).toLocaleString('en-IN')}</td></tr>`).join('')}</tbody></table></div>`:''}
+  <tbody>${reports.map(r=>`<tr><td>${new Date(r.date).toLocaleDateString('en-IN')}</td><td>${esc(r.actual_tasks||'—')}</td><td>${esc(r.progress_done||'—')}</td><td>${r.labor_used||0}</td><td>₹${(r.actual_expense||0).toLocaleString('en-IN')}</td></tr>`).join('')}</tbody></table></div>`:''}
 
   <div class="footer">Handy sQuad Field Management · Generated ${new Date().toLocaleString('en-IN')} · Confidential</div>
   </body></html>`;
@@ -416,7 +417,5 @@ function downloadJobFinancePDF(jobId) {
   showToast('PDF report opened — use Print to save', 'success');
 }
 
-// ── Override renderJobFinancials to redirect to accounts page ────
-function renderJobFinancials() {
-  return renderAccountsDashboard();
-}
+// renderJobFinancials is defined in pages.js — do NOT override it here.
+// (Previously this stub caused the Job Financials page to show the accounts dashboard instead.)
