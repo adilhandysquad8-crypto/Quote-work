@@ -1,3 +1,15 @@
+// ─── XSS ESCAPE HELPER ───────────────────────────────────────────
+// Use esc() for ALL user-supplied strings injected into innerHTML.
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
+
 // ─── ACTIONS ─────────────────────────────────────────────────────
 async function verifyPayment(id, status) {
   const { error } = await sb.from('payments').update({ status, verified_by: STATE.profile?.id, verified_at: new Date().toISOString() }).eq('id', id);
@@ -38,7 +50,7 @@ async function approveRework(id, status) {
   loadAllData();
 }
 
-async function finalizeQuotation(id) {
+function finalizeQuotation(id) {
   // Legacy shim — redirects to new modal
   openFinalizeModal(id);
 }
@@ -118,9 +130,9 @@ function convertLeadToVisit(leadId) {
   document.getElementById('modal-title').textContent = 'Schedule Site Visit';
   document.getElementById('modal-body').innerHTML = `
     <div style="background:var(--blue-50);border-radius:8px;padding:12px;margin-bottom:14px">
-      <div style="font-weight:600">${lead.customer_name}</div>
-      <div style="font-size:12px;color:var(--gray-500)">${lead.location_text||''} · ${lead.customer_phone||''}</div>
-      <div style="font-size:12px;color:var(--gray-600);margin-top:4px">${lead.requirement_summary||''}</div>
+      <div style="font-weight:600">${esc(lead.customer_name)}</div>
+      <div style="font-size:12px;color:var(--gray-500)">${esc(lead.location_text||'')} · ${esc(lead.customer_phone||'')}</div>
+      <div style="font-size:12px;color:var(--gray-600);margin-top:4px">${esc(lead.requirement_summary||'')}</div>
     </div>
     <div class="form-row-single form-group">
       <label class="form-label">Visit Date & Time</label>
@@ -190,7 +202,7 @@ async function submitScheduleVisit(leadId) {
   // Step 3: update lead status
   await sb.from('sales_leads').update({ status: 'site_visit_requested' }).eq('id', leadId);
 
-  showToast(`Site visit scheduled for ${lead.customer_name}!`, 'success');
+  showToast(`Site visit scheduled for ${esc(lead.customer_name)}!`, 'success');
   closeModal(); loadAllData();
 }
 
