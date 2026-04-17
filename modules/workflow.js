@@ -61,7 +61,11 @@ async function completeVisitAndAdvance(visitId, jobId) {
     .update({ status: 'completed', updated_at: new Date().toISOString() })
     .eq('id', visitId);
   if (ve) { showToast('Error: ' + ve.message, 'error'); return; }
-  showToast('Site visit completed!', 'success');
+  const { error: je } = await sb.from('jobs').update({ status: 'quotation' }).eq('id', jobId);
+  if (je) { showToast('Visit done, but job status update failed: ' + je.message, 'error'); return; }
+  const job = STATE.data.jobs.find(j => j.id === jobId);
+  if (job?.lead_id) await sb.from('sales_leads').update({ status: 'contacted' }).eq('id', job.lead_id);
+  showToast('Site visit completed! Job moved to Quotation stage.', 'success');
   loadAllData();
 }
 
@@ -96,7 +100,7 @@ async function markJobApproved(jobId) {
     <div style="margin-bottom:16px">
       <div style="background:var(--green-50);border:1px solid var(--green-100);border-radius:10px;padding:14px;margin-bottom:14px">
         <div style="font-weight:600;color:var(--green-700);margin-bottom:4px">✓ Confirming customer approval</div>
-        <div style="font-size:13px;color:var(--gray-600)">Job: <strong>${job?.customer_name}</strong></div>
+        <div style="font-size:13px;color:var(--gray-600)">Job: <strong>${esc(job?.customer_name)}</strong></div>
         ${quote ? `<div style="font-size:13px;color:var(--gray-600)">Approved Amount: <strong>₹${fmt(quote.final_amount||0)}</strong></div>` : ''}
       </div>
       <div class="form-row-single form-group">
@@ -110,7 +114,7 @@ async function markJobApproved(jobId) {
     </div>
     <div class="form-actions">
       <button class="btn-cancel" onclick="closeModal()">Cancel</button>
-      <button class="btn-submit" onclick="confirmStartWork('${jobId}','${quoteId||''}')">✓ Approve & Start Work</button>
+      <button class="btn-submit" onclick="confirmStartWork('${jobId}','${quote?.id||''}')">✓ Approve & Start Work</button>
     </div>`;
   document.getElementById('modal-backdrop').classList.add('open');
 }
@@ -169,8 +173,8 @@ function renderJobPipeline() {
                 const quote = d.quotations.find(q => q.job_id === j.id && q.status !== 'rejected');
                 return `
                 <div style="background:white;border-radius:8px;padding:10px;margin-bottom:6px;border:1px solid ${st.color}22;cursor:pointer" onclick="openJobDetail('${j.id}')">
-                  <div style="font-weight:600;font-size:13px;margin-bottom:3px">${j.customer_name||'—'}</div>
-                  <div style="font-size:11px;color:#64748b;margin-bottom:6px">${j.location_text||'—'}</div>
+                  <div style="font-weight:600;font-size:13px;margin-bottom:3px">${esc(j.customer_name||'—')}</div>
+                  <div style="font-size:11px;color:#64748b;margin-bottom:6px">${esc(j.location_text||'—')}</div>
                   ${quote ? `<div style="font-size:11px;color:${st.color};font-weight:600">₹${fmt(quote.final_amount||0)}</div>` : ''}
                   ${action ? `<button class="btn-sm ${action.style}" style="margin-top:6px;width:100%;font-size:11px" 
                     onclick="event.stopPropagation();${action.action}">${action.label}</button>` : ''}
@@ -181,12 +185,6 @@ function renderJobPipeline() {
     }).join('')}
     </div>
   </div>`;
-}
-
-// ── Job progress bar helper ───────────────────────────────────────
-function getJobProgress(job) {
-  const map = { site_visit:10, quotation:30, pending_approval:50, active:70, completed:100, delayed:60, rework:65 };
-  return map[job?.status] || 0;
 }
 
 // ─── JOB START/END DATE & TRACKER ────────────────────────────────
@@ -209,7 +207,7 @@ function openJobTracker(jobId) {
   const firstReport = reports[0]?.date;
   const lastReport  = reports[reports.length-1]?.date;
 
-  document.getElementById('modal-title').textContent = `📊 Job Tracker — ${job.customer_name}`;
+  document.getElementById('modal-title').textContent = `📊 Job Tracker — ${esc(job.customer_name)}`;
   document.getElementById('modal-body').innerHTML = `
   <div style="max-height:70vh;overflow-y:auto">
 
@@ -239,7 +237,7 @@ function openJobTracker(jobId) {
       <div style="font-weight:600;margin-bottom:8px;font-size:13px">Set Target Completion Date</div>
       <div style="display:flex;gap:8px;align-items:center">
         <input class="form-input" type="date" id="f-target-date" style="flex:1;font-size:13px;padding:8px 10px"
-          value="${job.target_date||''}" min="${new Date().toISOString().split('T')[0]}"/>
+          value="${job.description?.match(/TARGET:([\d-]+)/)?.[1]||''}" min="${new Date().toISOString().split('T')[0]}"/>
         <button class="btn-sm btn-approve" onclick="setJobTargetDate('${job.id}')">Set Date</button>
       </div>
       ${job.description?.includes('TARGET:') ? `<div style="margin-top:6px;font-size:12px;color:var(--amber-700)">Current target: <strong>${job.description.match(/TARGET:([\d-]+)/)?.[1]||'not set'}</strong></div>` : ''}
@@ -279,8 +277,8 @@ function openJobTracker(jobId) {
               <strong style="font-size:13px">${fmtDate(r.date)}</strong>
               <span style="font-size:12px;color:var(--gray-500)">${r.labor_used||0} workers · ₹${fmt(r.actual_expense||0)}</span>
             </div>
-            <div style="font-size:13px;color:var(--gray-700);margin-bottom:2px">${r.actual_tasks||'—'}</div>
-            <div style="font-size:12px;color:var(--blue-600)">${r.progress_done||''}</div>
+            <div style="font-size:13px;color:var(--gray-700);margin-bottom:2px">${esc(r.actual_tasks||'—')}</div>
+            <div style="font-size:12px;color:var(--blue-600)">${esc(r.progress_done||'')}</div>
             ${r.issues?`<div style="font-size:12px;color:var(--red-700);margin-top:3px">⚠ ${r.issues}</div>`:''}
           </div>`).join('')
       }
@@ -297,10 +295,17 @@ async function setJobTargetDate(jobId) {
   const date = document.getElementById('f-target-date').value;
   if (!date) { showToast('Pick a date', 'error'); return; }
   const job = STATE.data.jobs.find(j => j.id === jobId);
-  // Store target date in description field as a tag
-  let desc = (job.description || '').replace(/\s*TARGET:[\d-]+/g, '');
-  desc = desc + ` TARGET:${date}`;
-  const { error } = await sb.from('jobs').update({ description: desc.trim() }).eq('id', jobId);
+  // Try writing to target_date column first (add it to DB schema: target_date date).
+  // Fall back to embedding in description so it works even without the column.
+  const update = {};
+  if ('target_date' in (job || {})) {
+    update.target_date = date;
+  } else {
+    // Append/replace TARGET: tag in description without clobbering the real description
+    let desc = (job.description || '').replace(/\s*TARGET:[\d-]+/g, '').trimEnd();
+    update.description = desc + ` TARGET:${date}`;
+  }
+  const { error } = await sb.from('jobs').update(update).eq('id', jobId);
   if (error) { showToast('Error: ' + error.message, 'error'); return; }
   showToast(`Target date set: ${fmtDate(date)}`, 'success');
   closeModal(); loadAllData();
