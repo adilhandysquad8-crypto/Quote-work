@@ -14,8 +14,8 @@ function jobsList(jobs, role) {
     <div class="job-item" onclick="openJobDetail('${j.id}')">
       <div class="job-dot" style="background:${dotColor(j.status)}"></div>
       <div class="job-info">
-        <div class="job-name">${j.customer_name||'—'}</div>
-        <div class="job-meta">${j.location_text||'No location'} · #${j.id?.substring(0,8)}</div>
+        <div class="job-name">${esc(j.customer_name||'—')}</div>
+        <div class="job-meta">${esc(j.location_text||'No location')} · #${j.id?.substring(0,8)}</div>
       </div>
       <span class="job-status ${jobStatusClass(j.status)}">${j.status||'—'}</span>
     </div>`).join('');
@@ -28,8 +28,8 @@ function jobsWithProgress(jobs, showTracker) {
     return `<div class="job-item" style="cursor:pointer">
       <div class="job-dot" style="background:${dotColor(j.status)}"></div>
       <div class="job-info" onclick="openJobDetail('${j.id}')">
-        <div class="job-name">${j.customer_name||'—'}</div>
-        <div class="job-meta">${j.location_text||'No location'} · <span class="job-status ${jobStatusClass(j.status)}" style="font-size:10px;padding:1px 5px">${j.status}</span></div>
+        <div class="job-name">${esc(j.customer_name||'—')}</div>
+        <div class="job-meta">${esc(j.location_text||'No location')} · <span class="job-status ${jobStatusClass(j.status)}" style="font-size:10px;padding:1px 5px">${j.status}</span></div>
         <div class="progress-bar" style="margin-top:4px"><div class="progress-fill" style="width:${prog}%"></div></div>
         <div class="text-sm text-muted">${prog}% complete</div>
       </div>
@@ -44,8 +44,8 @@ function leadsList(leads) {
     <div class="job-item">
       <div class="job-dot" style="background:${dotColor(l.status)}"></div>
       <div class="job-info">
-        <div class="job-name">${l.customer_name||'—'}</div>
-        <div class="job-meta">${l.location_text||'No location'}</div>
+        <div class="job-name">${esc(l.customer_name||'—')}</div>
+        <div class="job-meta">${esc(l.location_text||'No location')}</div>
       </div>
       <span class="job-status ${leadStatusClass(l.status)}">${l.status||'—'}</span>
     </div>`).join('');
@@ -79,7 +79,7 @@ function siteVisitMini(visits) {
   return visits.map(v => `
     <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--gray-100)">
       <div style="width:6px;height:6px;border-radius:50%;background:var(--blue-600)"></div>
-      <div style="flex:1"><div class="text-sm">${v.jobs?.customer_name||'—'}</div><div class="text-sm text-muted">${fmtDateTime(v.scheduled_date)}</div></div>
+      <div style="flex:1"><div class="text-sm">${esc(v.jobs?.customer_name||'—')}</div><div class="text-sm text-muted">${fmtDateTime(v.scheduled_date)}</div></div>
       <span class="job-status status-review">${v.status}</span>
     </div>`).join('');
 }
@@ -90,7 +90,7 @@ function siteVisitMiniScheduling(visits) {
     <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--gray-100)">
       <div style="width:8px;height:8px;border-radius:50%;background:var(--blue-500);flex-shrink:0"></div>
       <div style="flex:1">
-        <div style="font-weight:500;font-size:13px">${v.jobs?.customer_name||'—'}</div>
+        <div style="font-weight:500;font-size:13px">${esc(v.jobs?.customer_name||'—')}</div>
         <div style="font-size:12px;color:var(--gray-500)">${fmtDateTime(v.scheduled_date)}</div>
       </div>
       <div style="display:flex;gap:6px;align-items:center">
@@ -107,8 +107,8 @@ function newLeadsNeedingVisit(leads) {
     <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--gray-100)">
       <div style="width:8px;height:8px;border-radius:50%;background:var(--amber-700);flex-shrink:0"></div>
       <div style="flex:1">
-        <div style="font-weight:500;font-size:13px">${l.customer_name||'—'}</div>
-        <div style="font-size:12px;color:var(--gray-500)">${l.location_text||'No location'} · ${fmtDate(l.created_at)}</div>
+        <div style="font-weight:500;font-size:13px">${esc(l.customer_name||'—')}</div>
+        <div style="font-size:12px;color:var(--gray-500)">${esc(l.location_text||'No location')} · ${fmtDate(l.created_at)}</div>
       </div>
       <button class="btn-sm btn-approve" onclick="convertLeadToVisit('${l.id}')">Schedule</button>
     </div>`).join('');
@@ -119,8 +119,8 @@ function reworkList(items, role) {
   return items.map(r => `
     <div class="rework-item">
       <div class="rework-info">
-        <div class="rework-name">${r.jobs?.customer_name||'—'}</div>
-        <div class="rework-reason">${r.reason||'No reason given'}</div>
+        <div class="rework-name">${esc(r.jobs?.customer_name||'—')}</div>
+        <div class="rework-reason">${esc(r.reason||'No reason given')}</div>
       </div>
       <div class="rework-actions">
         <span class="job-status ${reworkStatusClass(r.status)}">${r.status}</span>
@@ -147,7 +147,7 @@ function paymentVerifyList(payments) {
     <div class="payment-row" style="padding:12px 20px">
       <span class="pay-type ${p.type==='advance'?'pay-adv':'pay-fin'}">${p.type||'—'}</span>
       <div class="pay-info">
-        <div class="pay-name">${p.jobs?.customer_name||'—'}</div>
+        <div class="pay-name">${esc(p.jobs?.customer_name||'—')}</div>
         <div class="pay-sub">${fmtDate(p.created_at)}</div>
       </div>
       <span class="pay-amount">₹${fmt(p.amount||0)}</span>
@@ -161,7 +161,7 @@ function advanceApproveList(items) {
   return items.map(a => `
     <div class="payment-row" style="padding:12px 20px">
       <div class="pay-info">
-        <div class="pay-name">${a.jobs?.customer_name||'—'}</div>
+        <div class="pay-name">${esc(a.jobs?.customer_name||'—')}</div>
         <div class="pay-sub">Mat: ₹${fmt(a.material_amount||0)} · Lab: ₹${fmt(a.labour_amount||0)} · Other: ₹${fmt(a.other_amount||0)}</div>
       </div>
       <span class="pay-amount">₹${fmt(a.total_amount||0)}</span>
@@ -173,7 +173,7 @@ function expenseApproveList(items) {
   if (!items || items.length === 0) return `<div class="empty-state"><div class="empty-icon">◈</div><div class="empty-text">No pending expenses</div></div>`;
   return items.map(e => `
     <div class="expense-item" style="padding:10px 20px">
-      <div class="exp-name">${e.description||'—'}</div>
+      <div class="exp-name">${esc(e.description||'—')}</div>
       <span class="exp-amt">₹${fmt(e.total_amount||0)}</span>
       <button class="btn-sm btn-approve" onclick="approveExpense('${e.id}','approved')">Approve</button>
       <button class="btn-sm btn-reject" onclick="approveExpense('${e.id}','rejected')" style="margin-left:4px">Reject</button>
@@ -184,7 +184,7 @@ function expensesList(items) {
   if (!items || items.length === 0) return `<div class="empty-state"><div class="empty-icon">◈</div><div class="empty-text">No expenses</div></div>`;
   return items.map(e => `
     <div class="expense-item" style="padding:10px 16px">
-      <div class="exp-name">${e.description||'—'}</div>
+      <div class="exp-name">${esc(e.description||'—')}</div>
       <span class="exp-amt">₹${fmt(e.total_amount||0)}</span>
       <span class="exp-status ${e.status==='approved'?'exp-appr':e.status==='rejected'?'exp-rej':'exp-pend'}">${e.status||'pending'}</span>
     </div>`).join('');
