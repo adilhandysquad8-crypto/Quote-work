@@ -11,14 +11,14 @@ function openJobDetail(jobId) {
   const payIn = payments.filter(p=>p.status==='verified').reduce((s,p)=>s+(p.amount||0),0);
   const totalExp = expenses.filter(e=>e.status==='approved').reduce((s,e)=>s+(e.total_amount||0),0);
 
-  document.getElementById('modal-title').textContent = `Job: ${job.customer_name}`;
+  document.getElementById('modal-title').textContent = `Job: ${esc(job.customer_name)}`;
   document.getElementById('modal-body').innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-      <div><div class="form-label">Customer</div><div>${job.customer_name||'—'}</div></div>
-      <div><div class="form-label">Phone</div><div>${job.customer_phone||'—'}</div></div>
+      <div><div class="form-label">Customer</div><div>${esc(job.customer_name||'—')}</div></div>
+      <div><div class="form-label">Phone</div><div>${esc(job.customer_phone||'—')}</div></div>
       <div><div class="form-label">Location</div><div>${job.location_link?`<a href="${job.location_link}" target="_blank" class="loc-badge">📍 Open Map</a>`:job.location_text||'—'}</div></div>
       <div><div class="form-label">Status</div><span class="job-status ${jobStatusClass(job.status)}">${job.status||'—'}</span></div>
-      <div style="grid-column:1/-1"><div class="form-label">Description</div><div>${job.description||'—'}</div></div>
+      <div style="grid-column:1/-1"><div class="form-label">Description</div><div>${esc(job.description||'—')}</div></div>
     </div>
     ${visit?`<div style="background:var(--blue-50);border:1px solid var(--blue-100);border-radius:var(--radius-md);padding:12px;margin-bottom:14px">
       <div class="text-sm" style="color:var(--blue-800);font-weight:500">Site Visit: ${fmtDateTime(visit.scheduled_date)} · <span class="job-status ${visitStatusClass(visit.status)}">${visit.status}</span></div>
@@ -55,7 +55,7 @@ function openModal(type) {
     'daily-report': { title: 'Submit Daily Report', body: dailyReportForm() },
     'new-quotation': { title: 'Create Draft Quotation', body: newQuotationForm() },
     'assign-manager': { title: 'Assign Manager to Job', body: assignManagerForm() },
-    'release-funds': { title: 'Release Funds', body: releaseFundsForm() }
+    // 'release-funds' removed: use releaseAdvanceFunds(advId) from actions.js which passes the advance id correctly
   };
   const cfg = configs[type];
   if (!cfg) return;
@@ -69,7 +69,7 @@ function closeModal() { document.getElementById('modal-backdrop').classList.remo
 function closeModalOnBackdrop(e) { if (e.target === document.getElementById('modal-backdrop')) closeModal(); }
 
 function jobOptions() {
-  return STATE.data.jobs.map(j => `<option value="${j.id}">${j.customer_name} (#${j.id.substring(0,8)})</option>`).join('');
+  return STATE.data.jobs.map(j => `<option value="${j.id}">${esc(j.customer_name)} (#${j.id.substring(0,8)})</option>`).join('');
 }
 
 function newLeadForm() {
