@@ -21,9 +21,9 @@ function renderLeads() {
         ${filtered.length === 0 ? `<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">◎</div><div class="empty-text">No leads match filters</div></div></td></tr>` :
           filtered.map(l => `<tr>
             <td data-label="Customer"><strong>${l.customer_name||'—'}</strong></td>
-            <td data-label="Phone">${l.customer_phone||'—'}</td>
+            <td data-label="Phone">${esc(l.customer_phone||'—')}</td>
             <td data-label="Location">${l.location_link ? `<a href="${l.location_link}" target="_blank" class="loc-badge">📍 Map</a>` : l.location_text||'—'}</td>
-            <td data-label="Requirement" style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${l.requirement_summary||'—'}</td>
+            <td data-label="Requirement" style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(l.requirement_summary||'—')}</td>
             <td data-label="Status"><span class="job-status ${leadStatusClass(l.status)}">${(l.status||'—').replace(/_/g,' ')}</span></td>
             <td data-label="Created">${fmtDate(l.created_at)}</td>
             <td data-label="Actions">
@@ -44,6 +44,7 @@ function renderLeads() {
 }
 
 function renderJobs() {
+  if (!FILTERS['jobs']) FILTERS['jobs'] = {};
   const d = STATE.data;
   const role = STATE.role;
   const filtered = applyFilters(d.jobs, 'jobs', { searchFields: ['customer_name','location_text','customer_phone'] });
@@ -51,7 +52,6 @@ function renderJobs() {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <div class="text-muted text-sm">${filtered.length} of ${d.jobs.length} jobs</div>
     </div>
-    ${!FILTERS['jobs']?(FILTERS['jobs']={},''):''} 
     ${filterBar('jobs', {
       searchPlaceholder: 'Search customer, location...',
       statuses: ['site_visit','quotation','pending_approval','active','completed','delayed','rework'],
@@ -61,13 +61,13 @@ function renderJobs() {
       <table>
         <thead><tr><th>#</th><th>Customer</th><th>Location</th>${role==='scheduling'?'<th>Manager</th>':''}<th>Status</th>${role==='sales'?'<th>Site Visit</th><th>Quotation</th>':''}${role!=='sales'?'<th>Progress</th>':''}${role!=='sales'?'<th>Quoted</th>':''}<th>Created</th></tr></thead>
         <tbody>
-        ${filtered.length === 0 ? `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">▣</div><div class="empty-text">No jobs match filters</div></div></td></tr>` :
+        ${filtered.length === 0 ? `<tr><td colspan="20"><div class="empty-state"><div class="empty-icon">▣</div><div class="empty-text">No jobs match filters</div></div></td></tr>` :
           filtered.map((j,i) => {
             const bestQuote = d.quotations.filter(q=>q.job_id===j.id&&q.status!=='rejected').sort((a,b)=>b.version-a.version)[0];
             const visit = d.siteVisits.find(v=>v.job_id===j.id);
             return `<tr onclick="openJobDetail('${j.id}')" style="cursor:pointer">
               <td data-label="#"><span style="font-size:11px;color:var(--gray-400);font-family:monospace">${j.id?.substring(0,6).toUpperCase()}</span></td>
-              <td data-label="Customer"><strong>${j.customer_name||'—'}</strong></td>
+              <td data-label="Customer"><strong>${esc(j.customer_name||'—')}</strong></td>
               <td data-label="Location">${j.location_link ? `<a href="${j.location_link}" target="_blank" class="loc-badge" onclick="event.stopPropagation()">📍 Map</a>` : j.location_text||'—'}</td>
               ${role==='scheduling'?`<td data-label="Manager">${j.users?.name||'Unassigned'}</td>`:''}
               <td data-label="Status"><span class="job-status ${jobStatusClass(j.status)}">${(j.status||'—').replace(/_/g,' ')}</span></td>
@@ -112,10 +112,10 @@ function renderQuotations() {
       <table>
         <thead><tr><th>Quote #</th><th>Customer</th><th>Ver.</th><th>Items</th><th>Subtotal</th>${role!=='sales'?'<th>Profit</th><th>GST</th>':''}<th>Final</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
         <tbody>
-        ${filtered.length === 0 ? `<tr><td colspan="11"><div class="empty-state"><div class="empty-icon">◎</div><div class="empty-text">No quotations match filters</div></div></td></tr>` :
+        ${filtered.length === 0 ? `<tr><td colspan="20"><div class="empty-state"><div class="empty-icon">◎</div><div class="empty-text">No quotations match filters</div></div></td></tr>` :
           filtered.map(q => `<tr>
             <td data-label="Quote#"><span style="font-family:monospace;font-size:11px;background:var(--gray-100);padding:2px 6px;border-radius:4px">Q-${q.id?.substring(0,6).toUpperCase()}</span></td>
-            <td data-label="Customer"><strong>${q.jobs?.customer_name||'—'}</strong></td>
+            <td data-label="Customer"><strong>${esc(q.jobs?.customer_name||'—')}</strong></td>
             <td data-label="Ver">v${q.version||1}</td>
             <td data-label="Items"><span style="font-size:11px;background:var(--blue-50);color:var(--blue-700);padding:2px 7px;border-radius:20px">${(q.quotation_items||[]).length} items</span></td>
             <td data-label="Subtotal">₹${fmt(q.subtotal||0)}</td>
@@ -145,7 +145,7 @@ function viewQuotationDetail(qId) {
   const labItems = items.filter(i=>i.category==='labour');
   const othItems = items.filter(i=>i.category==='other');
   const itemTable = (list, color) => list.length === 0 ? '' : list.map(i =>
-    `<tr><td style="padding:6px 8px">${i.item_name||'—'}</td><td style="padding:6px 8px;color:var(--gray-500)">${i.description||'—'}</td><td style="padding:6px 8px;text-align:right">${i.quantity}</td><td style="padding:6px 8px;text-align:right">₹${fmt(i.unit_price)}</td><td style="padding:6px 8px;text-align:right;font-weight:600;color:${color}">₹${fmt(i.total_price)}</td></tr>`
+    `<tr><td style="padding:6px 8px">${i.item_name||'—'}</td><td style="padding:6px 8px;color:var(--gray-500)">${esc(i.description||'—')}</td><td style="padding:6px 8px;text-align:right">${i.quantity}</td><td style="padding:6px 8px;text-align:right">₹${fmt(i.unit_price)}</td><td style="padding:6px 8px;text-align:right;font-weight:600;color:${color}">₹${fmt(i.total_price)}</td></tr>`
   ).join('');
   const section = (title, list, color, bg) => list.length === 0 ? '' : `
     <div style="margin-bottom:12px">
@@ -156,7 +156,7 @@ function viewQuotationDetail(qId) {
       </table>
     </div>`;
 
-  document.getElementById('modal-title').textContent = `Quotation v${q.version||1} — ${q.jobs?.customer_name||''}`;
+  document.getElementById('modal-title').textContent = `Quotation v${q.version||1} — ${esc(q.jobs?.customer_name||'')}`;
   document.getElementById('modal-body').innerHTML = `
     <div style="max-height:70vh;overflow-y:auto">
       ${q.document_url&&!q.document_url.startsWith('http')?`<div style="background:var(--blue-50);border-left:3px solid var(--blue-500);padding:10px 14px;border-radius:0 8px 8px 0;margin-bottom:14px;font-size:13px;color:var(--gray-700)">${q.document_url}</div>`:''}
@@ -186,7 +186,7 @@ function openFinalizeModal(qId) {
   document.getElementById('modal-title').textContent = 'Finalize Quotation';
   document.getElementById('modal-body').innerHTML = `
     <div style="margin-bottom:14px;background:var(--blue-50);padding:10px 14px;border-radius:8px;font-size:13px">
-      <strong>${q.jobs?.customer_name}</strong> · Subtotal: <strong>₹${fmt(q.subtotal||0)}</strong> · ${(q.quotation_items||[]).length} items
+      <strong>${esc(q.jobs?.customer_name)}</strong> · Subtotal: <strong>₹${fmt(q.subtotal||0)}</strong> · ${(q.quotation_items||[]).length} items
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Profit Margin (₹)</label>
@@ -243,7 +243,7 @@ function downloadQuotationPDF(qId) {
   const itemRows = (list) => list.map(i => `
     <tr>
       <td style="padding:7px 10px;border-bottom:1px solid #eee">${i.item_name||'—'}</td>
-      <td style="padding:7px 10px;border-bottom:1px solid #eee;color:#666">${i.description||'—'}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #eee;color:#666">${esc(i.description||'—')}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right">${i.quantity}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right">₹${(i.unit_price||0).toLocaleString('en-IN')}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #eee;text-align:right;font-weight:600">₹${(i.total_price||0).toLocaleString('en-IN')}</td>
@@ -255,7 +255,7 @@ function downloadQuotationPDF(qId) {
     <tr style="background:#f9f9f9"><td colspan="4" style="padding:6px 10px;text-align:right;font-weight:600">${title} Total</td><td style="padding:6px 10px;text-align:right;font-weight:700;color:${color}">₹${total.toLocaleString('en-IN')}</td></tr>`;
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>Quotation - ${q.jobs?.customer_name||''}</title>
+  <title>Quotation - ${esc(q.jobs?.customer_name||'')}</title>
   <style>
     body{font-family:'Segoe UI',Arial,sans-serif;margin:0;padding:32px;color:#1e293b;font-size:14px}
     .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:32px;padding-bottom:20px;border-bottom:3px solid #1976D2}
@@ -281,9 +281,9 @@ function downloadQuotationPDF(qId) {
     <div class="meta"><strong>QUOTATION</strong>Version ${q.version||1} · ${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}<br>Status: ${(q.status||'').toUpperCase()}</div>
   </div>
   <div class="customer-box">
-    <div><div class="lbl">Customer</div><div class="val">${q.jobs?.customer_name||'—'}</div></div>
-    <div><div class="lbl">Phone</div><div class="val">${job?.customer_phone||'—'}</div></div>
-    <div><div class="lbl">Location</div><div class="val">${job?.location_text||'—'}</div></div>
+    <div><div class="lbl">Customer</div><div class="val">${esc(q.jobs?.customer_name||'—')}</div></div>
+    <div><div class="lbl">Phone</div><div class="val">${esc(job?.customer_phone||'—')}</div></div>
+    <div><div class="lbl">Location</div><div class="val">${esc(job?.location_text||'—')}</div></div>
     <div><div class="lbl">Quotation Date</div><div class="val">${new Date(q.created_at).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'})}</div></div>
   </div>
   ${q.document_url&&!q.document_url.startsWith('http')?`<div class="desc"><strong>Scope of Work:</strong> ${q.document_url}</div>`:''}
@@ -374,7 +374,7 @@ function renderExpenses() {
       <div class="text-muted text-sm">${filtered.length} expenses · Total: <strong>₹${fmt(total)}</strong></div>
       ${role==='manager'?`<button class="btn-submit" onclick="openModal('new-expense')">+ Add Expense</button>`:''}
     </div>
-    ${filterBar('expenses',{searchPlaceholder:'Search customer, description...',statuses:['pending','approved','rejected'],dateFilter:true})}
+    ${esc(filterBar('expenses',{searchPlaceholder:'Search customer, description...',statuses:['pending','approved','rejected'],dateFilter:true)})}
     <div class="table-wrap">
       <table>
         <thead><tr><th>Customer</th><th>Description</th><th>Amount</th><th>Status</th><th>Date</th>${role==='accounts'?'<th>Actions</th>':''}</tr></thead>
@@ -382,7 +382,7 @@ function renderExpenses() {
         ${filtered.length===0?`<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">◈</div><div class="empty-text">No expenses match filters</div></div></td></tr>`:
           filtered.map(e=>`<tr>
             <td data-label="Customer"><strong>${e.jobs?.customer_name||'—'}</strong></td>
-            <td data-label="Description">${e.description||'—'}</td>
+            <td data-label="Description">${esc(e.description||'—')}</td>
             <td data-label="Amount"><strong style="font-family:'DM Mono',monospace">₹${fmt(e.total_amount||0)}</strong></td>
             <td data-label="Status"><span class="job-status ${e.status==='approved'?'status-active':e.status==='rejected'?'status-rework':'status-pending'}">${e.status||'pending'}</span></td>
             <td data-label="Date">${fmtDate(e.created_at)}</td>
@@ -439,7 +439,7 @@ function renderFundReleases() {
             <td>${r.job_id?.substring(0,8)||'—'}</td>
             <td><strong style="font-family:'DM Mono',monospace">₹${fmt(r.amount||0)}</strong></td>
             <td><span class="exp-cat exp-mat">${r.release_method||'—'}</span></td>
-            <td>${r.note||'—'}</td>
+            <td>${esc(r.note||'—')}</td>
             <td>${fmtDate(r.created_at)}</td>
           </tr>`).join('')}
         </tbody>
@@ -462,7 +462,7 @@ function renderRework() {
         ${d.reworkRequests.length === 0 ? `<tr><td colspan="5"><div class="empty-state"><div class="empty-icon">↩</div><div class="empty-text">No rework requests</div></div></td></tr>` :
           d.reworkRequests.map(r => `<tr>
             <td>${r.jobs?.customer_name||'—'}</td>
-            <td>${r.reason||'—'}</td>
+            <td>${esc(r.reason||'—')}</td>
             <td><span class="job-status ${reworkStatusClass(r.status)}">${r.status||'pending'}</span></td>
             <td>${fmtDate(r.created_at)}</td>
             ${role==='scheduling'&&r.status==='pending'?`<td><button class="btn-sm btn-approve" onclick="approveRework('${r.id}','approved')">Approve</button> <button class="btn-sm btn-reject" onclick="approveRework('${r.id}','rejected')">Reject</button></td>`:role==='scheduling'?'<td>—</td>':''}
@@ -490,7 +490,7 @@ function renderSiteVisits() {
             <td>${fmtDateTime(v.scheduled_date)}</td>
             <td><span class="job-status ${visitStatusClass(v.status)}">${v.status||'—'}</span></td>
             <td>${v.previous_date?fmtDateTime(v.previous_date):'—'}</td>
-            <td>${v.reschedule_reason||'—'}</td>
+            <td>${esc(v.reschedule_reason||'—')}</td>
             ${role!=='sales'?`<td>
               ${v.status==='scheduled'?`<button class="btn-sm btn-verify" onclick="rescheduleVisit('${v.id}')">Reschedule</button>
               <button class="btn-sm btn-approve" onclick="completeVisit('${v.id}')">Complete</button>`:'—'}
@@ -515,8 +515,8 @@ function renderDailyPlans() {
         ${d.dailyPlans.length === 0 ? `<tr><td colspan="5"><div class="empty-state"><div class="empty-icon">◷</div><div class="empty-text">No plans yet</div></div></td></tr>` :
           d.dailyPlans.map(p => `<tr>
             <td>${p.date||'—'}</td>
-            <td>${p.planned_tasks||'—'}</td>
-            <td>${p.expected_progress||'—'}</td>
+            <td>${esc(p.planned_tasks||'—')}</td>
+            <td>${esc(p.expected_progress||'—')}</td>
             <td>${p.required_labor||0} workers</td>
             <td>₹${fmt(p.expected_expense||0)}</td>
           </tr>`).join('')}
@@ -539,11 +539,11 @@ function renderDailyReports() {
         ${d.dailyReports.length === 0 ? `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">✓</div><div class="empty-text">No reports yet</div></div></td></tr>` :
           d.dailyReports.map(r => `<tr>
             <td>${r.date||'—'}</td>
-            <td>${r.actual_tasks||'—'}</td>
-            <td>${r.progress_done||'—'}</td>
+            <td>${esc(r.actual_tasks||'—')}</td>
+            <td>${esc(r.progress_done||'—')}</td>
             <td>${r.labor_used||0} workers</td>
             <td>₹${fmt(r.actual_expense||0)}</td>
-            <td style="color:var(--red-700)">${r.issues||'None'}</td>
+            <td style="color:var(--red-700)">${esc(r.issues||'None')}</td>
           </tr>`).join('')}
         </tbody>
       </table>
@@ -552,8 +552,17 @@ function renderDailyReports() {
 
 function renderAdvanceBalance() {
   const d = STATE.data;
-  const totalReleased = d.advances.filter(a=>a.status==='released').reduce((s,a)=>s+(a.released_amount||0),0);
-  const totalSpent = d.expenses.filter(e=>e.status==='approved').reduce((s,e)=>s+(e.total_amount||0),0);
+  const uid = STATE.profile?.id;
+  // Scope to only this manager's assigned jobs
+  const myJobIds = new Set(
+    d.jobs.filter(j => j.assigned_manager_id === uid).map(j => j.id)
+  );
+  const totalReleased = d.advances
+    .filter(a => a.status === 'released' && myJobIds.has(a.job_id))
+    .reduce((s,a) => s + (a.released_amount||0), 0);
+  const totalSpent = d.expenses
+    .filter(e => e.status === 'approved' && myJobIds.has(e.job_id))
+    .reduce((s,e) => s + (e.total_amount||0), 0);
   const balance = totalReleased - totalSpent;
   return `
     <div class="stats-grid">
@@ -615,7 +624,7 @@ function renderJobFinancials() {
       <table>
         <thead><tr><th>Job</th><th>Quoted</th><th>Adv. Approved</th><th>Adv. Released</th><th>Expenses</th><th>Balance</th><th>Payments In</th></tr></thead>
         <tbody>
-        ${d.jobs.map(j => {
+        ${esc(d.jobs.map(j => {
           const q = d.quotations.find(q=>q.job_id===j.id&&(q.status==='approved'||q.status==='sent'));
           const adv = d.advances.filter(a=>a.job_id===j.id);
           const advAppr = adv.filter(a=>a.status!=='rejected').reduce((s,a)=>s+(a.approved_amount||a.total_amount||0),0);
@@ -624,7 +633,7 @@ function renderJobFinancials() {
           const payin = d.payments.filter(p=>p.job_id===j.id&&p.status==='verified').reduce((s,p)=>s+(p.amount||0),0);
           const balance = advRel - exp;
           return `<tr>
-            <td><strong>${j.customer_name||'—'}</strong></td>
+            <td><strong>${j.customer_name||'—')}</strong></td>
             <td>₹${fmt(q?.final_amount||0)}</td>
             <td>₹${fmt(advAppr)}</td>
             <td>₹${fmt(advRel)}</td>
