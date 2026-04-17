@@ -2,6 +2,21 @@
 // Holds line items while building a quotation
 let QUOTE_ITEMS = [];
 
+// Show customer/location info when job selection changes in the quotation form
+function updateQuoteJobInfo() {
+  const jobId = document.getElementById('f-qjob')?.value;
+  const job = STATE.data.jobs.find(j => j.id === jobId);
+  const infoEl = document.getElementById('quote-job-info');
+  if (!infoEl) return;
+  if (!job) { infoEl.style.display = 'none'; return; }
+  infoEl.style.display = 'block';
+  infoEl.innerHTML = '<div style="background:var(--blue-50);border-radius:8px;padding:10px 14px;font-size:13px">' +
+    '<strong>' + esc(job.customer_name||'') + '</strong>' +
+    (job.customer_phone ? ' · ' + esc(job.customer_phone) : '') +
+    (job.location_text  ? '<div style="color:var(--gray-500);margin-top:2px">' + esc(job.location_text) + '</div>' : '') +
+    '</div>';
+}
+
 function newQuotationForm() {
   const role = STATE.role;
   QUOTE_ITEMS = [];
@@ -11,6 +26,7 @@ function newQuotationForm() {
       <label class="form-label">Job / Customer</label>
       <select class="form-select" id="f-qjob" onchange="updateQuoteJobInfo()">${jobOptions()}</select>
     </div>
+    <div id="quote-job-info" style="display:none;margin-bottom:8px"></div>
     <div class="form-row-single form-group">
       <label class="form-label">Scope of Work / Description</label>
       <textarea class="form-textarea" id="f-qdesc" placeholder="Describe the overall work scope, site conditions, special requirements..."></textarea>
@@ -124,7 +140,7 @@ function renderQuoteItems() {
             oninput="updateQuoteItem('${item.id}','item_name',this.value)"/>
         </div>
         <div class="form-group">
-          <input class="form-input" style="font-size:13px;padding:6px 10px" placeholder="Description (optional)" value="${item.description}"
+          <input class="form-input" style="font-size:13px;padding:6px 10px" placeholder="Description (optional)" value="${esc(item.description)}"
             oninput="updateQuoteItem('${item.id}','description',this.value)"/>
         </div>
       </div>
@@ -182,10 +198,11 @@ async function submitQuotation() {
   const gst      = parseFloat(document.getElementById('f-qgst')?.value)||0;
   const final    = (subtotal + profit) * (1 + gst/100);
   const existing = STATE.data.quotations.filter(q=>q.job_id===jobId);
+  const maxVer = existing.reduce((m,q) => Math.max(m, q.version||0), 0);
 
   const { data: qData, error } = await sb.from('quotations').insert({
     job_id: jobId,
-    version: (existing.length||0)+1,
+    version: maxVer + 1,
     subtotal, profit_added: profit, gst,
     final_amount: Math.round(final),
     status: 'draft',
@@ -230,9 +247,10 @@ async function submitAssignManager() {
   const jobId = document.getElementById('f-amjob').value;
   const managerId = document.getElementById('f-ammanager').value;
   if (!managerId) { showToast('No manager selected', 'error'); return; }
+  // Only update the manager assignment — do NOT force status to active.
+  // The job must progress through the normal workflow stages.
   const { error } = await sb.from('jobs').update({
-    assigned_manager_id: managerId,
-    status: 'active'
+    assigned_manager_id: managerId
   }).eq('id', jobId);
   if (error) { showToast('Error: ' + error.message, 'error'); return; }
   showToast('Manager assigned!', 'success');
@@ -242,7 +260,7 @@ async function submitAssignManager() {
 function releaseFundsForm(advanceId) {
   const advances = STATE.data.advances.filter(a => a.status === 'approved');
   const advOptions = advances.length > 0
-    ? advances.map(a => `<option value="${a.id}" ${a.id===advanceId?'selected':''}>${a.jobs?.customer_name||'Job'} — ₹${fmt(a.approved_amount||a.total_amount||0)} approved</option>`).join('')
+    ? advances.map(a => `<option value="${a.id}" ${a.id===advanceId?'selected':''}>${esc(a.jobs?.customer_name||'Job')} — ₹${fmt(a.approved_amount||a.total_amount||0)} approved</option>`).join('')
     : `<option value="">No approved advances</option>`;
   return `
     <div class="form-row-single form-group"><label class="form-label">Advance Request</label>
