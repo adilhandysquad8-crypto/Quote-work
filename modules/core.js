@@ -22,54 +22,6 @@ let STATE = {
     allUsers: []
   }
 };
-// ─── FILTER FUNCTIONS (moved from filters.js) ───────────────────
-var FILTERS = {};
-
-function applyFilters(items, page, options = {}) {
-  const f = FILTERS[page] || {};
-  let filtered = [...items];
-  if (f.search && options.searchFields) {
-    const q = f.search.toLowerCase();
-    filtered = filtered.filter(item =>
-      options.searchFields.some(field => (item[field] || '').toLowerCase().includes(q))
-    );
-  }
-  if (f.status) filtered = filtered.filter(item => item.status === f.status);
-  if (f.dateFrom) filtered = filtered.filter(item => new Date(item.created_at) >= new Date(f.dateFrom));
-  if (f.dateTo) filtered = filtered.filter(item => new Date(item.created_at) <= new Date(f.dateTo + 'T23:59:59'));
-  return filtered;
-}
-
-function filterBar(page, config) {
-  const f = FILTERS[page] || {};
-  return `
-    <div class="filter-bar" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;align-items:center">
-      <input type="text" class="form-input" style="flex:1;min-width:150px" placeholder="${config.searchPlaceholder || 'Search...'}" 
-        value="${f.search || ''}" oninput="updateFilter('${page}','search',this.value)">
-      <select class="form-select" style="width:auto" onchange="updateFilter('${page}','status',this.value)">
-        <option value="">All statuses</option>
-        ${(config.statuses || []).map(s => `<option value="${s}" ${f.status === s ? 'selected' : ''}>${s}</option>`).join('')}
-      </select>
-      ${config.dateFilter ? `
-        <input type="date" class="form-input" style="width:130px" placeholder="From" value="${f.dateFrom || ''}" onchange="updateFilter('${page}','dateFrom',this.value)">
-        <input type="date" class="form-input" style="width:130px" placeholder="To" value="${f.dateTo || ''}" onchange="updateFilter('${page}','dateTo',this.value)">
-      ` : ''}
-      <button class="btn-sm" onclick="resetFilters('${page}')">Clear</button>
-    </div>
-  `;
-}
-
-window.updateFilter = function(page, key, value) {
-  if (!FILTERS[page]) FILTERS[page] = {};
-  if (value === '') delete FILTERS[page][key];
-  else FILTERS[page][key] = value;
-  renderPage(STATE.currentPage);
-};
-
-window.resetFilters = function(page) {
-  delete FILTERS[page];
-  renderPage(STATE.currentPage);
-};
 
 // ─── BOOT ───────────────────────────────────────────────────────
 async function boot() {
@@ -99,11 +51,22 @@ window.addEventListener('DOMContentLoaded', boot);
 
 // Handle post-boot auth events (user-triggered login / logout)
 sb.auth.onAuthStateChange(async (event, session) => {
-  // SIGNED_IN during boot is handled by boot() directly — skip it
-  // Only act on SIGNED_OUT (logout button) here
   if (event === 'SIGNED_OUT') {
     STATE.user = null; STATE.profile = null; STATE.role = null;
     showAuth();
+    return;
+  }
+  // If the token refresh silently failed, session will be null — force re-login
+  if (event === 'TOKEN_REFRESHED' && !session) {
+    showToast('Your session expired. Please sign in again.', 'error');
+    STATE.user = null; STATE.profile = null; STATE.role = null;
+    await sb.auth.signOut();
+    showAuth();
+    return;
+  }
+  // If a different user signed in from another tab, reload to pick up new identity
+  if (event === 'SIGNED_IN' && session && STATE.user && session.user.id !== STATE.user.id) {
+    window.location.reload();
   }
 });
 
