@@ -193,14 +193,7 @@ function renderPage(pageId) {
   };
 
   titleEl.textContent = titles[pageId] || pageId;
-  const renderFn = pages[pageId] || (typeof renderDashboard !== 'undefined' ? renderDashboard : null);
-if (!renderFn) {
-  console.error(`Render function for "${pageId}" not ready yet.`);
-  el.innerHTML = '<div class="empty-state">Loading dashboard...</div>';
-  setTimeout(() => renderPage(pageId), 100);
-  return;
-}
-el.innerHTML = renderFn();
+  el.innerHTML = (pages[pageId] || renderDashboard)();
   closeSidebar();
   updateBottomNav(pageId);
 }
