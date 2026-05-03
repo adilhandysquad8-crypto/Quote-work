@@ -374,7 +374,7 @@ function renderExpenses() {
       <div class="text-muted text-sm">${filtered.length} expenses · Total: <strong>₹${fmt(total)}</strong></div>
       ${role==='manager'?`<button class="btn-submit" onclick="openModal('new-expense')">+ Add Expense</button>`:''}
     </div>
-    ${filterBar('expenses',{searchPlaceholder:'Search customer, description...',statuses:['pending','approved','rejected'],dateFilter:true)}
+    ${filterBar('expenses',{searchPlaceholder:'Search customer, description...',statuses:['pending','approved','rejected'],dateFilter:true})}
     <div class="table-wrap">
       <table>
         <thead><tr><th>Customer</th><th>Description</th><th>Amount</th><th>Status</th><th>Date</th>${role==='accounts'?'<th>Actions</th>':''}</tr></thead>
@@ -624,7 +624,7 @@ function renderJobFinancials() {
       <table>
         <thead><tr><th>Job</th><th>Quoted</th><th>Adv. Approved</th><th>Adv. Released</th><th>Expenses</th><th>Balance</th><th>Payments In</th></tr></thead>
         <tbody>
-        ${esc(d.jobs.map(j => {
+        ${d.jobs.map(j => {
           const q = d.quotations.find(q=>q.job_id===j.id&&(q.status==='approved'||q.status==='sent'));
           const adv = d.advances.filter(a=>a.job_id===j.id);
           const advAppr = adv.filter(a=>a.status!=='rejected').reduce((s,a)=>s+(a.approved_amount||a.total_amount||0),0);
@@ -633,7 +633,7 @@ function renderJobFinancials() {
           const payin = d.payments.filter(p=>p.job_id===j.id&&p.status==='verified').reduce((s,p)=>s+(p.amount||0),0);
           const balance = advRel - exp;
           return `<tr>
-            <td><strong>${j.customer_name||'—')}</strong></td>
+            <td><strong>${j.customer_name||'—'}</strong></td>
             <td>₹${fmt(q?.final_amount||0)}</td>
             <td>₹${fmt(advAppr)}</td>
             <td>₹${fmt(advRel)}</td>
