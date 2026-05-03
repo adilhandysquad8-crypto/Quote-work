@@ -99,20 +99,89 @@ function renderSalesDashboard() {
 
 function renderSchedulingDashboard() {
   const d = STATE.data;
-  const needsAction = d.jobs.filter(j => j.status !== 'completed' && j.status !== 'delayed').length;
-  const delayed     = d.jobs.filter(j => j.status === 'delayed').length;
-  const inVisit     = d.jobs.filter(j => j.status === 'site_visit').length;
-  const inQuote     = d.jobs.filter(j => j.status === 'quotation' || j.status === 'pending_approval').length;
-  const inWork      = d.jobs.filter(j => j.status === 'active').length;
+  const needsAction   = d.jobs.filter(j => j.status !== 'completed' && j.status !== 'delayed').length;
+  const delayed       = d.jobs.filter(j => j.status === 'delayed').length;
+  const inVisit       = d.jobs.filter(j => j.status === 'site_visit').length;
+  const inQuote       = d.jobs.filter(j => j.status === 'quotation' || j.status === 'pending_approval').length;
+  const inWork        = d.jobs.filter(j => j.status === 'active').length;
   const pendingRework = d.reworkRequests.filter(r => r.status === 'pending').length;
+
+  // Leads that sales has flagged as needing a visit (scheduled by sales OR still pending)
+  const leadsNeedingVisit = d.leads.filter(l => l.status === 'site_visit_requested' || l.status === 'new');
+
+  // All scheduled site visits (created by sales or scheduling)
+  const scheduledVisits = d.siteVisits.filter(v => v.status === 'scheduled');
 
   return `
     <div class="stats-grid">
       ${statCard('Needs Action', needsAction, '#1976D2', needsAction>0?'badge-warn':'badge-up', 'Jobs in pipeline')}
-      ${statCard('Site Visit Stage', inVisit, '#2196F3', inVisit>0?'badge-info':'badge-up', inVisit>0?'Visit pending':'Clear')}
+      ${statCard('Site Visits', scheduledVisits.length, '#2196F3', scheduledVisits.length>0?'badge-warn':'badge-up', scheduledVisits.length>0?'Upcoming':'Clear')}
       ${statCard('Quote Stage', inQuote, '#FF9800', inQuote>0?'badge-warn':'badge-up', inQuote>0?'Awaiting approval':'Clear')}
       ${statCard('Work In Progress', inWork, '#4CAF50', inWork>0?'badge-info':'badge-up', inWork>0?'Active':'None')}
     </div>
+
+    <!-- SITE VISITS SCHEDULED (by sales or scheduling) -->
+    <div class="card" style="margin-bottom:16px;border-left:4px solid var(--blue-500)">
+      <div class="card-header">
+        <span class="card-title">📍 Scheduled Site Visits</span>
+        <span class="card-link" onclick="renderPage('site-visits')">View all</span>
+      </div>
+      ${scheduledVisits.length === 0
+        ? `<div class="card-body"><div class="empty-state"><div class="empty-icon">◷</div><div class="empty-text">No site visits scheduled</div></div></div>`
+        : `<div style="padding:0 16px">
+            ${scheduledVisits.map(v => {
+              const job = d.jobs.find(j => j.id === v.job_id);
+              const assignedUser = d.allUsers.find(u => u.id === v.assigned_to);
+              return `<div style="display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--gray-100)">
+                <div style="width:8px;height:8px;border-radius:50%;background:var(--blue-500);flex-shrink:0"></div>
+                <div style="flex:1">
+                  <div style="font-weight:600;font-size:13px">${esc(job?.customer_name||v.jobs?.customer_name||'—')}</div>
+                  <div style="font-size:12px;color:var(--gray-500)">${esc(job?.location_text||'')} · ${fmtDateTime(v.scheduled_date)}</div>
+                  ${assignedUser ? `<div style="font-size:11px;color:var(--blue-600)">👤 ${esc(assignedUser.name)}</div>` : ''}
+                </div>
+                <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+                  ${job?.location_link ? `<a href="${job.location_link}" target="_blank" class="btn-sm btn-verify" style="text-decoration:none">📍 Map</a>` : ''}
+                  <button class="btn-sm btn-approve" onclick="completeVisitAndAdvance('${v.id}','${v.job_id}')">✓ Done</button>
+                  <button class="btn-sm btn-verify" onclick="rescheduleVisit('${v.id}')">Reschedule</button>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>`
+      }
+    </div>
+
+    <!-- LEADS REQUESTING A VISIT (sales has flagged, not yet confirmed by scheduling) -->
+    ${leadsNeedingVisit.length > 0 ? `
+    <div class="card" style="margin-bottom:16px;border-left:4px solid var(--amber-700)">
+      <div class="card-header">
+        <span class="card-title">⚠ Leads Requesting Site Visit</span>
+        <span class="nav-badge warn">${leadsNeedingVisit.length}</span>
+      </div>
+      <div style="padding:0 16px">
+        ${leadsNeedingVisit.map(l => {
+          // Check if a job + site_visit already exists for this lead (scheduled by sales)
+          const job = d.jobs.find(j => j.lead_id === l.id);
+          const existingVisit = job ? d.siteVisits.find(v => v.job_id === job.id) : null;
+          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--gray-100)">
+            <div style="width:8px;height:8px;border-radius:50%;background:var(--amber-700);flex-shrink:0"></div>
+            <div style="flex:1">
+              <div style="font-weight:600;font-size:13px">${esc(l.customer_name||'—')}</div>
+              <div style="font-size:12px;color:var(--gray-500)">${esc(l.location_text||'No location')} · ${fmtDate(l.created_at)}</div>
+              ${existingVisit
+                ? `<div style="font-size:11px;color:var(--blue-600)">Visit set: ${fmtDateTime(existingVisit.scheduled_date)} · <span style="color:var(--green-700)">Scheduled by sales ✓</span></div>`
+                : `<div style="font-size:11px;color:var(--amber-700)">No visit scheduled yet</div>`
+              }
+            </div>
+            <div style="flex-shrink:0">
+              ${existingVisit
+                ? `<button class="btn-sm btn-approve" onclick="completeVisitAndAdvance('${existingVisit.id}','${existingVisit.job_id}')">✓ Mark Done</button>`
+                : `<button class="btn-sm btn-approve" onclick="convertLeadToVisit('${l.id}')">Schedule</button>`
+              }
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : ''}
 
     <!-- PIPELINE BOARD -->
     <div class="card" style="margin-bottom:16px">
