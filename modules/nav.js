@@ -62,7 +62,7 @@ const NAV_CONFIG = {
     ]},
     { section: 'Management', items: [
       { id: 'jobs', icon: '▣', label: 'All Jobs' },
-      { id: 'site-visits', icon: '◷', label: 'Site Visits' },
+      { id: 'site-visits', icon: '◷', label: 'Site Visits', badgeKey: 'scheduledVisits', badgeWarn: true },
       { id: 'quotations', icon: '◎', label: 'Quotations' },
       { id: 'rework', icon: '↩', label: 'Rework Queue', badgeKey: 'pendingRework' }
     ]},
@@ -125,6 +125,7 @@ function getBadgeCount(key) {
     case 'pendingAdvances':return d.advances.filter(a => a.status === 'pending').length;
     case 'pendingPayments':return d.payments.filter(p => p.status === 'pending').length;
     case 'pendingExpenses':return d.expenses.filter(e => e.status === 'pending').length;
+    case 'scheduledVisits':return d.siteVisits.filter(v => v.status === 'scheduled').length;
     default: return 0;
   }
 }
