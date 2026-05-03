@@ -379,7 +379,7 @@ function downloadJobFinancePDF(jobId) {
   <div class="section">
     <div class="section-title">Approved Expenses</div>
     <table><thead><tr><th class="th">Description</th><th class="th">Amount</th><th class="th">Date</th></tr></thead>
-    <tbody>${esc(expenses.map(e=>`<tr><td>${e.description||'—')}</td><td>₹${(e.total_amount||0).toLocaleString('en-IN')}</td><td>${new Date(e.created_at).toLocaleDateString('en-IN')}</td></tr>`).join('')}
+    <tbody>${expenses.map(e=>`<tr><td>${e.description||'—'}</td><td>₹${(e.total_amount||0).toLocaleString('en-IN')}</td><td>${new Date(e.created_at).toLocaleDateString('en-IN')}</td></tr>`).join('')}
     <tr class="total-row"><td>Total Expenses</td><td class="red">₹${totalExp.toLocaleString('en-IN')}</td><td></td></tr></tbody></table>
   </div>
 
