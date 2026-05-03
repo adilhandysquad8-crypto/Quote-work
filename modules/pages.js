@@ -374,7 +374,7 @@ function renderExpenses() {
       <div class="text-muted text-sm">${filtered.length} expenses · Total: <strong>₹${fmt(total)}</strong></div>
       ${role==='manager'?`<button class="btn-submit" onclick="openModal('new-expense')">+ Add Expense</button>`:''}
     </div>
-    ${esc(filterBar('expenses',{searchPlaceholder:'Search customer, description...',statuses:['pending','approved','rejected'],dateFilter:true)})}
+    ${filterBar('expenses',{searchPlaceholder:'Search customer, description...',statuses:['pending','approved','rejected'],dateFilter:true)}
     <div class="table-wrap">
       <table>
         <thead><tr><th>Customer</th><th>Description</th><th>Amount</th><th>Status</th><th>Date</th>${role==='accounts'?'<th>Actions</th>':''}</tr></thead>
