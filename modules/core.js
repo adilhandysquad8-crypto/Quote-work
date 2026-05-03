@@ -5,8 +5,8 @@
 ═══════════════════════════════════════════════════════════════ */
 
 // ─── SUPABASE INIT ─────────────────────────────────────────────
-const SUPABASE_URL = 'https://zkzehotlgoroxdwwsjfx.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpremVob3RsZ29yb3hkd3dzamZ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU5MjgwNzIsImV4cCI6MjA5MTUwNDA3Mn0.JFkI_Lk5ReZDIht5yRsE57ALc-PRGobGxmJ67i48cSI';
+const SUPABASE_URL = 'https://nfaemkuadsmisyjbuogm.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5mYWVta3VhZHNtaXN5amJ1b2dtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4MDYwNTQsImV4cCI6MjA5MzM4MjA1NH0.ZyCbYUS3-hRqwDOGWkIuUBfnBQ0t1gUQO_mwkdXsDzI';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
 // ─── APP STATE ──────────────────────────────────────────────────
