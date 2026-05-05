@@ -160,8 +160,7 @@ async function submitExpense() {
   if (!desc || !amt) { showToast('Fill all required fields', 'error'); return; }
   const { error } = await sb.from('expenses').insert({
     job_id: jobId, description: desc, total_amount: amt,
-    proof_url: proof,
-    added_by: STATE.profile?.id,   // schema field
+    added_by: STATE.profile?.id,
     status: 'pending'
   });
   if (error) { showToast('Error: ' + error.message, 'error'); return; }
