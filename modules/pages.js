@@ -183,27 +183,50 @@ function viewQuotationDetail(qId) {
 function openFinalizeModal(qId) {
   const q = STATE.data.quotations.find(x => x.id === qId);
   if (!q) return;
+  const items    = q.quotation_items || [];
+  const subtotal = items.reduce((s, i) => s + (i.total_price || 0), 0);
+  const matTotal = items.filter(i=>i.category==='material').reduce((s,i)=>s+(i.total_price||0),0);
+  const labTotal = items.filter(i=>i.category==='labour').reduce((s,i)=>s+(i.total_price||0),0);
+  const othTotal = items.filter(i=>i.category==='other').reduce((s,i)=>s+(i.total_price||0),0);
   document.getElementById('modal-title').textContent = 'Finalize Quotation';
   document.getElementById('modal-body').innerHTML = `
     <div style="margin-bottom:14px;background:var(--blue-50);padding:10px 14px;border-radius:8px;font-size:13px">
-      <strong>${esc(q.jobs?.customer_name)}</strong> · Subtotal: <strong>₹${fmt(q.subtotal||0)}</strong> · ${(q.quotation_items||[]).length} items
+      <strong>${esc(q.jobs?.customer_name)}</strong> · ${items.length} items
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
+      <div style="background:var(--blue-50);border-radius:8px;padding:8px;text-align:center">
+        <div style="font-size:10px;color:var(--blue-700);font-weight:600">MATERIAL</div>
+        <div style="font-weight:700;color:var(--blue-700)">₹${fmt(matTotal)}</div>
+      </div>
+      <div style="background:var(--green-50);border-radius:8px;padding:8px;text-align:center">
+        <div style="font-size:10px;color:var(--green-700);font-weight:600">LABOUR</div>
+        <div style="font-weight:700;color:var(--green-700)">₹${fmt(labTotal)}</div>
+      </div>
+      <div style="background:var(--purple-50);border-radius:8px;padding:8px;text-align:center">
+        <div style="font-size:10px;color:var(--purple-700);font-weight:600">OTHER</div>
+        <div style="font-weight:700;color:var(--purple-700)">₹${fmt(othTotal)}</div>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--gray-100);margin-bottom:12px">
+      <span style="color:var(--gray-600)">Subtotal</span>
+      <span style="font-weight:600">₹${fmt(subtotal)}</span>
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Profit Margin (₹)</label>
-        <input class="form-input" type="number" id="f-fin-profit" value="${q.profit_added||0}" oninput="calcFinalizeTotal(${q.subtotal||0})"/></div>
+        <input class="form-input" type="number" id="f-fin-profit" value="${q.profit_added||0}" oninput="calcFinalizeTotal(${subtotal})"/></div>
       <div class="form-group"><label class="form-label">GST (%)</label>
-        <input class="form-input" type="number" id="f-fin-gst" value="${q.gst||18}" oninput="calcFinalizeTotal(${q.subtotal||0})"/></div>
+        <input class="form-input" type="number" id="f-fin-gst" value="${q.gst||18}" oninput="calcFinalizeTotal(${subtotal})"/></div>
     </div>
     <div style="display:flex;justify-content:space-between;background:var(--gray-50);padding:12px;border-radius:8px;margin-bottom:14px">
       <span style="font-weight:600">Final Amount</span>
-      <span style="font-weight:700;font-size:18px;color:var(--blue-700)" id="f-fin-total">₹${fmt(q.final_amount||0)}</span>
+      <span style="font-weight:700;font-size:18px;color:var(--blue-700)" id="f-fin-total">₹${fmt(q.final_amount||subtotal)}</span>
     </div>
     <div class="form-actions">
       <button class="btn-cancel" onclick="closeModal()">Cancel</button>
       <button class="btn-submit" onclick="submitFinalizeQuotation('${qId}')">Finalize & Mark Reviewed</button>
     </div>`;
   document.getElementById('modal-backdrop').classList.add('open');
-  calcFinalizeTotal(q.subtotal||0);
+  calcFinalizeTotal(subtotal);
 }
 
 function calcFinalizeTotal(subtotal) {
@@ -218,7 +241,10 @@ async function submitFinalizeQuotation(qId) {
   const q = STATE.data.quotations.find(x => x.id === qId);
   const profit = parseFloat(document.getElementById('f-fin-profit').value)||0;
   const gst    = parseFloat(document.getElementById('f-fin-gst').value)||0;
-  const final  = Math.round((( q?.subtotal||0) + profit) * (1 + gst/100));
+  // Derive subtotal from line items (q.subtotal was never stored in DB)
+  const items  = q?.quotation_items || [];
+  const subtotal = items.reduce((s, i) => s + (i.total_price || 0), 0);
+  const final  = Math.round((subtotal + profit) * (1 + gst/100));
   const { error } = await sb.from('quotations').update({
     profit_added: profit, gst, final_amount: final,
     status: 'reviewed', reviewed_by: STATE.profile?.id
