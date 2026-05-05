@@ -203,11 +203,12 @@ async function submitQuotation() {
   const { data: qData, error } = await sb.from('quotations').insert({
     job_id: jobId,
     version: maxVer + 1,
-    subtotal, profit_added: profit, gst,
+    description: desc,
+    profit_added: profit,
+    gst,
     final_amount: Math.round(final),
     status: 'draft',
-    created_by: STATE.profile?.id,
-    document_url: desc  // reuse document_url to store description until schema has a field
+    created_by: STATE.profile?.id
   }).select().single();
 
   if (error) { showToast('Error: ' + error.message, 'error'); return; }
@@ -291,16 +292,17 @@ async function submitFundRelease() {
   // Insert fund release record
   const { error } = await sb.from('fund_releases').insert({
     job_id: adv?.job_id,
-    advance_request_id: advId,
-    amount, release_method: method, note,
+    advance_id: advId,
+    released_amount: amount,
+    mode: method,
+    reference: note,
     released_by: STATE.profile?.id
   });
   if (error) { showToast('Error: ' + error.message, 'error'); return; }
   // Update advance status to released
   await sb.from('advance_requests').update({
     status: 'released',
-    released_amount: amount,
-    released_at: new Date().toISOString()
+    released_amount: amount
   }).eq('id', advId);
   showToast(`₹${fmt(amount)} released via ${method}!`, 'success');
   closeModal(); loadAllData();
